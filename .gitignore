@@ -1,0 +1,9 @@
+# Build output
+bin/
+obj/
+
+# Match bin/obj folders anywhere in the repo
+**/bin/
+**/obj/
+/.vs
+/DataArc.EntityFrameworkCore.Demo.Benchmark/BenchmarkDotNet.Artifacts
