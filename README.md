@@ -125,7 +125,8 @@ flowchart TB
     C --> I[Database Seeder]
 
     E --> J[IAsyncQuery]
-    E --> K[IAsyncCommandBuilder]
+    E --> K[ICommandFactory]
+    K --> L[Command Builder]
 ```
 
 The application module does not need to know how the database is created, seeded, or registered.
@@ -155,6 +156,7 @@ sequenceDiagram
     participant App as Application
     participant Service as FinanceService
     participant Query as DataArc IAsyncQuery
+    participant Factory as DataArc ICommandFactory
     participant Command as DataArc Command Builder
     participant HR as HrDbContext
     participant Finance as FinanceDbContext
@@ -162,15 +164,18 @@ sequenceDiagram
     participant Ops as OperationsDbContext
 
     App->>Service: ProcessEmployeeFinanceDataAsync(rate, batchSize)
-    Service->>Query: UseQueryContext<HrDbContext>()
+    Service->>Query: UseExecutionContext<IHrDbContext>()
     Query->>HR: Read employees
     HR-->>Service: Employee list
 
     Service->>Service: Adjust salaries
 
-    Service->>Command: UseCommandContext<FinanceDbContext>().AddBulk(...)
-    Service->>Command: UseCommandContext<ItDbContext>().AddBulk(...)
-    Service->>Command: UseCommandContext<OperationsDbContext>().AddBulk(...)
+    Service->>Factory: CreateCommandBuilderAsync()
+    Factory-->>Service: Command builder
+
+    Service->>Command: UseExecutionContext<IFinanceDbContext>().AddBulk(...)
+    Service->>Command: UseExecutionContext<IItDbContext>().AddBulk(...)
+    Service->>Command: UseExecutionContext<IOperationsDbContext>().AddBulk(...)
 
     Service->>Command: BuildAsync()
     Service->>Command: ExecuteParallelAsync()
@@ -191,37 +196,40 @@ sequenceDiagram
 
 ## Core Code Shape
 
+Application services inject `ICommandFactory` as the command entry point. They create the required command or command builder inside the workflow instead of injecting a specific builder type at construction time.
+
 The demo reads employees from one context:
 
 ```csharp
 var employeesQuery = await _asyncQuery
-    .UseQueryContext<HrDbContext>()
+    .UseExecutionContext<IHrDbContext>()
         .ReadWhereAsync<Employee>(e => e.Salary > 10000m);
 ```
 
 It then builds a command pipeline across multiple contexts:
 
 ```csharp
-var processSalaryAdjustmentCommand =
-    _asyncCommandBuilder
-        .UseCommandContext<FinanceDbContext>()
-            .AddBulk(employeesQuery, batchSize);
+var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
 
-processSalaryAdjustmentCommand
-    .UseCommandContext<ItDbContext>()
+commandBuilder
+    .UseExecutionContext<IFinanceDbContext>()
         .AddBulk(employeesQuery, batchSize);
 
-processSalaryAdjustmentCommand
-    .UseCommandContext<OperationsDbContext>()
+commandBuilder
+    .UseExecutionContext<IItDbContext>()
+        .AddBulk(employeesQuery, batchSize);
+
+commandBuilder
+    .UseExecutionContext<IOperationsDbContext>()
         .AddBulk(employeesQuery, batchSize);
 ```
 
 Then it builds and executes the pipeline in parallel:
 
 ```csharp
-var commandBuilder = await processSalaryAdjustmentCommand.BuildAsync();
+var command = await commandBuilder.BuildAsync();
 
-var commandResult = await commandBuilder.ExecuteParallelAsync();
+var commandResult = await command.ExecuteParallelAsync();
 
 if (!commandResult.Success)
 {
@@ -241,27 +249,34 @@ DataArc treats each registered context as an execution boundary.
 ```csharp
 services
     .AddDataArcCore()
-    .ConfigureExecutionContexts(ctx =>
+    .UseEntityFrameworkCoreProviders(provider =>
     {
-        ctx.AddDbContext<FinanceDbContext>(options =>
-            options.UseSqlServer(financeConnectionString));
+        provider.ConfigureExecutionContexts(ctx =>
+        {
+            ctx.AddDbContext<IFinanceDbContext, FinanceDbContext>(options =>
+                options.UseSqlServer(financeConnectionString));
 
-        ctx.AddDbContext<HrDbContext>(options =>
-            options.UseSqlServer(hrConnectionString));
+            ctx.AddDbContext<IHrDbContext, HrDbContext>(options =>
+                options.UseSqlServer(hrConnectionString));
 
-        ctx.AddDbContext<ItDbContext>(options =>
-            options.UseSqlServer(itConnectionString));
+            ctx.AddDbContext<IItDbContext, ItDbContext>(options =>
+                options.UseSqlServer(itConnectionString));
 
-        ctx.AddDbContext<OperationsDbContext>(options =>
-            options.UseSqlServer(operationsConnectionString));
+            ctx.AddDbContext<IOperationsDbContext, OperationsDbContext>(options =>
+                options.UseSqlServer(operationsConnectionString));
+        });
     });
 ```
 
 Each context implements the DataArc execution context contract:
 
 ```csharp
+public interface IFinanceDbContext : IExecutionContext<FinanceDbContext>
+{
+}
+
 public class FinanceDbContext 
-    : DbContext, IExecutionContext<FinanceDbContext>
+    : DbContext, IFinanceDbContext
 {
     public FinanceDbContext(DbContextOptions<FinanceDbContext> options)
         : base(options)
@@ -277,14 +292,16 @@ public class FinanceDbContext
 
 # Database Setup
 
-The demo also shows DataArc schema/database coordination through `IDatabaseBuilder`.
+The demo also shows DataArc schema/database coordination through `IDatabaseFactory`.
 
 ```csharp
-var db = _databaseBuilder
-    .UseContext<FinanceDbContext>()
-    .UseContext<HrDbContext>()
-    .UseContext<ItDbContext>()
-    .UseContext<OperationsDbContext>()
+var databaseBuilder = _databaseFactory.CreateDatabaseBuilder();
+
+var db = databaseBuilder
+    .UseContext<IFinanceDbContext>()
+    .UseContext<IHrDbContext>()
+    .UseContext<IItDbContext>()
+    .UseContext<IOperationsDbContext>()
     .Build(applyChanges: true, generateScripts: true);
 
 db.ExecuteDrop();
@@ -293,7 +310,8 @@ db.ExecuteCreate();
 
 ```mermaid
 flowchart LR
-    A[IDatabaseBuilder] --> B[FinanceDbContext]
+    A[IDatabaseFactory] --> X[CreateDatabaseBuilder]
+    X --> B[FinanceDbContext]
     A --> C[HrDbContext]
     A --> D[ItDbContext]
     A --> E[OperationsDbContext]
@@ -328,12 +346,14 @@ Total inserted records = 1,000,000
 The benchmark is intentionally focused on the execution layer. It builds one DataArc command pipeline and executes the work in parallel across all registered context boundaries.
 
 ```csharp
-_asyncCommandBuilder.UseCommandContext<HrDbContext>().AddBulk(_employees, BulkBatchSize);
-_asyncCommandBuilder.UseCommandContext<FinanceDbContext>().AddBulk(_employees, BulkBatchSize);
-_asyncCommandBuilder.UseCommandContext<ItDbContext>().AddBulk(_employees, BulkBatchSize);
-_asyncCommandBuilder.UseCommandContext<OperationsDbContext>().AddBulk(_employees, BulkBatchSize);
+var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
 
-var command = await _asyncCommandBuilder.BuildAsync();
+commandBuilder.UseExecutionContext<IHrDbContext>().AddBulk(_employees, BulkBatchSize);
+commandBuilder.UseExecutionContext<IFinanceDbContext>().AddBulk(_employees, BulkBatchSize);
+commandBuilder.UseExecutionContext<IItDbContext>().AddBulk(_employees, BulkBatchSize);
+commandBuilder.UseExecutionContext<IOperationsDbContext>().AddBulk(_employees, BulkBatchSize);
+
+var command = await commandBuilder.BuildAsync();
 var commandResult = await command.ExecuteParallelAsync();
 ```
 
@@ -373,9 +393,9 @@ Diagnosers: MemoryDiagnoser, ThreadingDiagnoser
 
 | Method | Record Count | Total Inserted Records | Mean | StdDev | Completed Work Items | Lock Contentions | Gen0 | Allocated |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| ExecuteParallelBulkInsertAsync | 10,000 | 40,000 | 181.5 ms | 21.73 ms | 2,870 | - | - | 10 MB |
-| ExecuteParallelBulkInsertAsync | 100,000 | 400,000 | 777.2 ms | 95.16 ms | 30,920 | - | - | 97.08 MB |
-| ExecuteParallelBulkInsertAsync | 250,000 | 1,000,000 | 1,465.5 ms | 63.11 ms | 77,724 | - | 10,000 | 242.17 MB |
+| ExecuteParallelBulkInsertAsync | 10,000 | 40,000 | 193.7 ms | 4.16 ms | 2,952 | - | - | 10.04 MB |
+| ExecuteParallelBulkInsertAsync | 100,000 | 400,000 | 657.2 ms | 77.40 ms | 30,844 | - | - | 97.02 MB |
+| ExecuteParallelBulkInsertAsync | 250,000 | 1,000,000 | 2,350.7 ms | 52.27 ms | 78,184 | - | 10,000 | 242.4 MB |
 
 ## Benchmark Trend
 
@@ -383,8 +403,8 @@ Diagnosers: MemoryDiagnoser, ThreadingDiagnoser
 xychart-beta
     title "Parallel bulk insert mean time"
     x-axis ["40k", "400k", "1M"]
-    y-axis "Mean time in ms" 0 --> 1600
-    bar [181.5, 777.2, 1465.5]
+    y-axis "Mean time in ms" 0 --> 2500
+    bar [193.7, 657.2, 2350.7]
 ```
 
 ```mermaid
@@ -392,12 +412,12 @@ xychart-beta
     title "Managed memory allocated per operation"
     x-axis ["40k", "400k", "1M"]
     y-axis "Allocated MB" 0 --> 260
-    bar [10, 97.08, 242.17]
+    bar [10.04, 97.02, 242.4]
 ```
 
 ## What This Shows
 
-At the largest measured size in this demo benchmark, DataArc.EntityFrameworkCore inserted 1,000,000 total records across four participating EF Core contexts in approximately 1.46 seconds, allocating approximately 242 MB of managed memory for the operation.
+At the largest measured size in this demo benchmark, DataArc.EntityFrameworkCore inserted 1,000,000 total records across four participating EF Core contexts in approximately 2.35 seconds, allocating approximately 242 MB of managed memory for the operation.
 
 The useful engineering signal is not only the elapsed time. The stronger signal is that the workload is executed through a single explicit command pipeline, across multiple context boundaries, with structured success/failure reporting and no reported lock contentions in this run.
 
@@ -510,11 +530,11 @@ DataArc turns this into a command pipeline:
 
 ```csharp
 var commands = await commandBuilder
-    .UseCommandContext<FinanceDbContext>()
+    .UseExecutionContext<IFinanceDbContext>()
         .AddBulk(financeEmployees, batchSize)
-    .UseCommandContext<ItDbContext>()
+    .UseExecutionContext<IItDbContext>()
         .AddBulk(itEmployees, batchSize)
-    .UseCommandContext<OperationsDbContext>()
+    .UseExecutionContext<IOperationsDbContext>()
         .AddBulk(operationsEmployees, batchSize)
     .BuildAsync();
 
@@ -530,7 +550,7 @@ DataArc separates reads and writes through dedicated query and command APIs.
 ```mermaid
 flowchart LR
     A[Application Service] --> Q[IAsyncQuery]
-    A --> C[IAsyncCommand / IAsyncCommandBuilder]
+    A --> C[ICommandFactory]
 
     Q --> R[Read Models]
     C --> W[Write Pipeline]
@@ -601,7 +621,7 @@ Each join adds data to the bag. The final projection creates a workflow-specific
 
 ```csharp
 var rows = await asyncQuery
-    .UseQueryContext<IntersectionContext, UserProduct>(x => x.UserId == userId)
+    .UseExecutionContext<IIntersectionContext, UserProduct>(x => x.UserId == userId)
     .Join<ProductsContext, Product>(
         bag => bag.Get<UserProduct>()!.ProductId,
         product => product.Id)
