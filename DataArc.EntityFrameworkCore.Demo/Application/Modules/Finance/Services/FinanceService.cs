@@ -7,13 +7,13 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
 {
     public class FinanceService : IFinanceService
     {
-        private readonly IAsyncCommandBuilder _commandBuilder;
+        private readonly ICommandFactory _commandFactory;
         private readonly IAsyncQuery _asyncQuery;
 
-        public FinanceService(IAsyncQuery asyncQuery, IAsyncCommandBuilder commandBuilder)
+        public FinanceService(IAsyncQuery asyncQuery, ICommandFactory commandFactory)
         {
             _asyncQuery = asyncQuery;
-            _commandBuilder = commandBuilder;
+            _commandFactory = commandFactory;
         }
 
         public async Task<List<EmployeeDto>> GetTopRatedEmployeesAsync(double rating)
@@ -53,20 +53,22 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
                 employee.Salary += employee.Salary * salaryAdjustmentBaseRate;
             }
 
-            _commandBuilder
+            var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
+
+            commandBuilder
                 .UseExecutionContext<IFinanceDbContext>()
                 .AddBulk(employeesQuery, batchSize);
 
-            _commandBuilder
+            commandBuilder
                 .UseExecutionContext<IItDbContext>()
                 .AddBulk(employeesQuery, batchSize);
 
-            _commandBuilder
+            commandBuilder
                 .UseExecutionContext<IOperationsDbContext>()
                 .AddBulk(employeesQuery, batchSize);
 
             // Build the command builder pipeline and execute the command in parallel across the different contexts
-            var command = await _commandBuilder.BuildAsync();
+            var command = await commandBuilder.BuildAsync();
             var commandResult = await command.ExecuteParallelAsync();
 
             // Check the command result for success and handle any errors or exceptions

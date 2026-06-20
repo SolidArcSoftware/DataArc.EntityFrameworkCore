@@ -26,7 +26,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
     {
         private IServiceProvider? _serviceProvider;
         private IDatabaseCreator? _databaseCreator;
-        private IAsyncCommandBuilder? _asyncCommandBuilder;
+        private ICommandFactory? _commandFactory;
         private IReadOnlyList<Employee>? _employees;
 
         [Params(10_000, 100_000, 250_000)]
@@ -41,7 +41,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
                 .BuildServiceProvider();
 
             _databaseCreator = _serviceProvider.GetRequiredService<IDatabaseCreator>();
-            _asyncCommandBuilder = _serviceProvider.GetRequiredService<IAsyncCommandBuilder>();
+            _commandFactory = _serviceProvider.GetRequiredService<ICommandFactory>();
         }
 
         [IterationSetup]
@@ -62,28 +62,30 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         [Benchmark]
         public async Task<int> ExecuteParallelBulkInsertAsync()
         {
-            if (_asyncCommandBuilder == null)
-                throw new InvalidOperationException($"{nameof(IAsyncCommandBuilder)} was not resolved.");
+            var commandBuilder = await _commandFactory!.CreateCommandBuilderAsync();
+
+            if (commandBuilder == null)
+                throw new InvalidOperationException($"{nameof(commandBuilder)} was not resolved.");
 
             if (_employees == null)
                 throw new InvalidOperationException("Benchmark employee data was not generated.");
 
-            _asyncCommandBuilder
+            commandBuilder
                 .UseExecutionContext<IHrDbContext>()
                     .AddBulk(_employees, BulkBatchSize);
 
-            _asyncCommandBuilder
+            commandBuilder
                 .UseExecutionContext<IFinanceDbContext>()
                     .AddBulk(_employees, BulkBatchSize);
 
-            _asyncCommandBuilder.UseExecutionContext<IItDbContext>()
+            commandBuilder.UseExecutionContext<IItDbContext>()
                     .AddBulk(_employees, BulkBatchSize);
 
-            _asyncCommandBuilder
+            commandBuilder
                 .UseExecutionContext<IOperationsDbContext>()
                     .AddBulk(_employees, BulkBatchSize);
 
-            var command = await _asyncCommandBuilder.BuildAsync();
+            var command = await commandBuilder.BuildAsync();
             var commandResult = await command.ExecuteParallelAsync();
 
             if (!commandResult.Success)

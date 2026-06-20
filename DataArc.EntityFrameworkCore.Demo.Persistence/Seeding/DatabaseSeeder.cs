@@ -12,19 +12,19 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Seeding
 
     public class DatabaseSeeder : IDatabaseSeeder
     {
-        private readonly ICommand _command;
-        private readonly IAsyncCommand _asyncCommand;
-        public DatabaseSeeder(ICommand command, IAsyncCommand asyncCommand)
+        private readonly ICommandFactory _commandFactory;
+        
+        public DatabaseSeeder(ICommandFactory commandFactory)
         {
-            _command = command;
-            _asyncCommand = asyncCommand;
+            _commandFactory = commandFactory;
         }
 
         public bool SeedDatabase(int recordCount)
         {
             try
             {
-                var seedingCommand = _command
+                var seedingCommand = _commandFactory.CreateCommand();
+                seedingCommand
                   .UseExecutionContext<HrDbContext>()
                   .AddBulk(SeedDataGenerator.GenerateHrSeedData(recordCount), recordCount)
                   .Execute();
@@ -42,7 +42,8 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Seeding
             try
             {
                 // Build and execute the seeding command
-                var seedingCommand = await _asyncCommand
+                var seedingCommand = await _commandFactory.CreateCommandAsync();
+                await seedingCommand
                     .UseExecutionContext<HrDbContext>()
                     .AddBulk(SeedDataGenerator.GenerateHrSeedData(recordCount), recordCount)
                     .ExecuteAsync();
