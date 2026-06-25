@@ -136,6 +136,7 @@ internal class Program
             }
         }
 
+        Console.WriteLine();
         Console.WriteLine("Press any key to exit");
         Console.ReadKey();
     }

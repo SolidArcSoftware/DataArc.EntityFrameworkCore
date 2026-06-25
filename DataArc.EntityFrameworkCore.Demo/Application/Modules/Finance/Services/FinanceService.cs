@@ -45,12 +45,13 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
             int batchSize)
         {
             // Build a query to read employee data from the HR database context based on the salary threshold
-            var employeesQuery = await _asyncQuery
+            var employeesQuery = await _queryFactory.CreateQueryAsync();
+            var employees = await employeesQuery
                 .UseExecutionContext<IHrDbContext>()
                     .ReadWhereAsync<Employee>(e => e.Salary > salaryThreshold);
 
             //Adjust salaries
-            foreach (var employee in employeesQuery)
+            foreach (var employee in employees)
             {
                 employee.Salary += employee.Salary * salaryAdjustmentBaseRate;
             }
@@ -59,15 +60,15 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
 
             commandBuilder
                 .UseExecutionContext<IFinanceDbContext>()
-                .AddBulk(employeesQuery, batchSize);
+                .AddBulk(employees, batchSize);
 
             commandBuilder
                 .UseExecutionContext<IItDbContext>()
-                .AddBulk(employeesQuery, batchSize);
+                .AddBulk(employees, batchSize);
 
             commandBuilder
                 .UseExecutionContext<IOperationsDbContext>()
-                .AddBulk(employeesQuery, batchSize);
+                .AddBulk(employees, batchSize);
 
             // Build the command builder pipeline and execute the command in parallel across the different contexts
             var command = await commandBuilder.BuildAsync();
