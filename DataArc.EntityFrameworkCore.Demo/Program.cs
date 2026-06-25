@@ -135,7 +135,8 @@ internal class Program
                 Console.WriteLine($"Top Rated Employee: {employee.Name} {employee.Surname}, Salary: {employee.Salary}");
             }
         }
-        
+
+        Console.WriteLine("Press any key to exit");
         Console.ReadKey();
     }
 

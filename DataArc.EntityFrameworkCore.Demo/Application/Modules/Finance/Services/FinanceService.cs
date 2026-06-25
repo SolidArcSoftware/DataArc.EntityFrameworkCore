@@ -8,17 +8,19 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
     public class FinanceService : IFinanceService
     {
         private readonly ICommandFactory _commandFactory;
-        private readonly IAsyncQuery _asyncQuery;
+        private readonly IQueryFactory _queryFactory;
 
-        public FinanceService(IAsyncQuery asyncQuery, ICommandFactory commandFactory)
+        public FinanceService(IQueryFactory queryFactory, ICommandFactory commandFactory)
         {
-            _asyncQuery = asyncQuery;
+            _queryFactory = queryFactory;
             _commandFactory = commandFactory;
         }
 
         public async Task<List<EmployeeDto>> GetTopRatedEmployeesAsync(double rating)
         {
-            var topRatedEmployeesJoinedContextQuery = await _asyncQuery
+            var topRatedEmployeesQuery = await _queryFactory.CreateQueryAsync();
+
+            var topRatedEmployees = await topRatedEmployeesQuery
                 .UseExecutionContext<IHrDbContext, Employee>(e => e.Rating > rating)
                     .Join<IFinanceDbContext, Employee>
                         (bag => bag.Get<Employee>()!.Id, f => f.Id)
@@ -34,7 +36,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
 
                 }).ToListAsync();
 
-            return topRatedEmployeesJoinedContextQuery;
+            return topRatedEmployees;
         }
 
         public async Task<int> ProcessEmployeeFinanceDataAsync(
