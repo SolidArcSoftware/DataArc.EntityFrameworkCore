@@ -25,7 +25,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Seeding
             {
                 var seedingCommand = _commandFactory.CreateCommand();
                 seedingCommand
-                  .UseExecutionContext<HrDbContext>()
+                  .UseDbExecutionContext<HrDbContext>()
                   .AddBulk(SeedDataGenerator.GenerateHrSeedData(recordCount), recordCount)
                   .Execute();
 
@@ -44,7 +44,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Seeding
                 // Build and execute the seeding command
                 var seedingCommand = await _commandFactory.CreateCommandAsync();
                 await seedingCommand
-                    .UseExecutionContext<HrDbContext>()
+                    .UseDbExecutionContext<HrDbContext>()
                     .AddBulk(SeedDataGenerator.GenerateHrSeedData(recordCount), recordCount)
                     .ExecuteAsync();
 

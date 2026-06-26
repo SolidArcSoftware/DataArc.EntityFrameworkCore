@@ -26,24 +26,24 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence
                           .Build();
 
             services
-                 .AddDataArcCore()
-                 .UseEntityFrameworkCoreProviders(provider =>
+                 .AddDataArcCore(options => options.UseKey("fbc5708d:1782412617.3wzC5EVJv3s"))
+                 .ConfigureDataArc(provider =>
                  {
-                     provider.ConfigureExecutionContexts(context =>
+                     provider.UseEntityFrameworkCore(context =>
                      {
-                         context.AddDbContext<IFinanceDbContext, FinanceDbContext>(options => options
+                         context.AddDbExecutionContext<IFinanceDbContext, FinanceDbContext>(options => options
                                 .UseSqlServer(configurationManager.GetConnectionString("FinanceDb"))
                                 .UseLoggerFactory(factory));
 
-                         context.AddDbContext<IHrDbContext, HrDbContext>(options => options
+                         context.AddDbExecutionContext<IHrDbContext, HrDbContext>(options => options
                                 .UseSqlServer(configurationManager.GetConnectionString("HrDb"))
                                 .UseLoggerFactory(factory));
 
-                         context.AddDbContext<IItDbContext, ItDbContext>(options => options
+                         context.AddDbExecutionContext<IItDbContext, ItDbContext>(options => options
                                 .UseSqlServer(configurationManager.GetConnectionString("ItDb"))
                                 .UseLoggerFactory(factory));
 
-                         context.AddDbContext<IOperationsDbContext, OperationsDbContext>(options => options
+                         context.AddDbExecutionContext<IOperationsDbContext, OperationsDbContext>(options => options
                                 .UseSqlServer(configurationManager.GetConnectionString("OperationsDb"))
                                 .UseLoggerFactory(factory));
                      });

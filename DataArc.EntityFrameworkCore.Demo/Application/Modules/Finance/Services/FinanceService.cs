@@ -21,7 +21,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
             var topRatedEmployeesQuery = await _queryFactory.CreateQueryAsync();
 
             var topRatedEmployees = await topRatedEmployeesQuery
-                .UseExecutionContext<IHrDbContext, Employee>(e => e.Rating > rating)
+                .UseDbExecutionContext<IHrDbContext, Employee>(e => e.Rating > rating)
                     .Join<IFinanceDbContext, Employee>
                         (bag => bag.Get<Employee>()!.Id, f => f.Id)
                     .Join<IItDbContext, Employee>
@@ -47,7 +47,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
             // Build a query to read employee data from the HR database context based on the salary threshold
             var employeesQuery = await _queryFactory.CreateQueryAsync();
             var employees = await employeesQuery
-                .UseExecutionContext<IHrDbContext>()
+                .UseDbExecutionContext<IHrDbContext>()
                     .ReadWhereAsync<Employee>(e => e.Salary > salaryThreshold);
 
             //Adjust salaries
@@ -59,15 +59,15 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
             var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
 
             commandBuilder
-                .UseExecutionContext<IFinanceDbContext>()
+                .UseDbExecutionContext<IFinanceDbContext>()
                 .AddBulk(employees, batchSize);
 
             commandBuilder
-                .UseExecutionContext<IItDbContext>()
+                .UseDbExecutionContext<IItDbContext>()
                 .AddBulk(employees, batchSize);
 
             commandBuilder
-                .UseExecutionContext<IOperationsDbContext>()
+                .UseDbExecutionContext<IOperationsDbContext>()
                 .AddBulk(employees, batchSize);
 
             // Build the command builder pipeline and execute the command in parallel across the different contexts

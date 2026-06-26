@@ -29,10 +29,10 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Seeding
                 //Synchronize the database schemas with the current model definitions. This ensures that any changes made to the model classes are reflected in the database structure.
                 var databaseBuilder = _databaseFactory.CreateDatabaseBuilder();
                 var db = databaseBuilder
-                        .UseContext<FinanceDbContext>()
-                        .UseContext<HrDbContext>()
-                        .UseContext<ItDbContext>()
-                        .UseContext<OperationsDbContext>()
+                        .IncludeDbContext<FinanceDbContext>()
+                        .IncludeDbContext<HrDbContext>()
+                        .IncludeDbContext<ItDbContext>()
+                        .IncludeDbContext<OperationsDbContext>()
                         .Build(applyChanges: true, generateScripts: true); //Generates SQL scripts for the database changes and applies them to the databases. This is useful for debugging and auditing purposes.
 
                 // Drop and create databases
@@ -58,10 +58,10 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Seeding
                 // Drop the databases if they exist. This is useful for resetting the state of the databases during development or testing.
                 var databaseBuilder = _databaseFactory.CreateDatabaseBuilder();
                 var db = databaseBuilder
-                      .UseContext<FinanceDbContext>()
-                      .UseContext<HrDbContext>()
-                      .UseContext<ItDbContext>()
-                      .UseContext<OperationsDbContext>()
+                      .IncludeDbContext<FinanceDbContext>()
+                      .IncludeDbContext<HrDbContext>()
+                      .IncludeDbContext<ItDbContext>()
+                      .IncludeDbContext<OperationsDbContext>()
                       .Build(applyChanges: true, generateScripts: true);
 
                 db.ExecuteDrop();

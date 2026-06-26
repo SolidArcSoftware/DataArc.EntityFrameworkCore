@@ -71,18 +71,18 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
                 throw new InvalidOperationException("Benchmark employee data was not generated.");
 
             commandBuilder
-                .UseExecutionContext<IHrDbContext>()
+                .UseDbExecutionContext<IHrDbContext>()
                     .AddBulk(_employees, BulkBatchSize);
 
             commandBuilder
-                .UseExecutionContext<IFinanceDbContext>()
+                .UseDbExecutionContext<IFinanceDbContext>()
                     .AddBulk(_employees, BulkBatchSize);
 
-            commandBuilder.UseExecutionContext<IItDbContext>()
+            commandBuilder.UseDbExecutionContext<IItDbContext>()
                     .AddBulk(_employees, BulkBatchSize);
 
             commandBuilder
-                .UseExecutionContext<IOperationsDbContext>()
+                .UseDbExecutionContext<IOperationsDbContext>()
                     .AddBulk(_employees, BulkBatchSize);
 
             var command = await commandBuilder.BuildAsync();
