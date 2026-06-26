@@ -26,7 +26,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence
                           .Build();
 
             services
-                 .AddDataArcCore(options => options.UseKey("fbc5708d:1782412617.3wzC5EVJv3s"))
+                 .AddDataArcCore()
                  .ConfigureDataArc(provider =>
                  {
                      provider.UseEntityFrameworkCore(context =>
