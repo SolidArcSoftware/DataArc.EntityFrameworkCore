@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DataArc.EntityFrameworkCore.Demo\DataArc.EntityFrameworkCore.Demo.csproj" />
+    <ProjectReference Include="..\DataArc.EntityFrameworkCore.Demo.Persistence\DataArc.EntityFrameworkCore.Demo.Persistence.csproj" />
   </ItemGroup>
 
 </Project>
