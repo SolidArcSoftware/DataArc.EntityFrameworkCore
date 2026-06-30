@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataArc.EntityFrameworkCore.Demo", "DataArc.EntityFrameworkCore.Demo\DataArc.EntityFrameworkCore.Demo.csproj", "{3D577C7C-117D-F53F-64F7-1B0C0079336E}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{96401826-80EF-45F3-BB72-6AE4F4A1F99A}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataArc.EntityFrameworkCore.Demo.Benchmark", "DataArc.EntityFrameworkCore.Demo.Benchmark\DataArc.EntityFrameworkCore.Demo.Benchmark.csproj", "{297A96A5-D98A-4DFE-AE5C-A7B61884C5BA}"
 EndProject

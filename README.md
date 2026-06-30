@@ -1,60 +1,148 @@
-# DataArc.EntityFrameworkCore Demo
+# DataArc.EntityFrameworkCore
 
-> EF Core for modular systems that need explicit execution, isolated `DbContext` boundaries, bulk operations, and cross-context workflows.
+> EF Core execution for workflows that need isolated `DbContext` boundaries, bulk operations, cross-context reads, parallel writes, and structured results.
 
-This repository demonstrates **DataArc.EntityFrameworkCore** inside a small modular .NET application.
+**DataArc.EntityFrameworkCore** utilises EF Core.
 
-The goal is adoption first: the demo starts with familiar EF Core concepts, then shows where DataArc adds value.
+It providates a dedicated execution layer that allows application code to coordinate data work across multiple `DbContext` boundaries without turning the workflow into a pile of repository calls, handler classes, or manual `DbContext` plumbing.
 
-DataArc does not replace EF Core. It gives EF Core a deterministic execution layer for workflows that need to move beyond one direct `DbContext` call.
+This demo shows the product in a small finance-style workflow:
 
----
-
-## Start Here
-
-Recommended reading order:
-
-1. `Program.cs`
-2. `Application/Modules/Finance/Registration/FinanceModuleRegistration.cs`
-3. `Application/Modules/Finance/Features/SalaryAdjustments/Services/SalaryAdjustmentService.cs`
-4. `Application/Modules/Finance/Features/EmployeePerformance/Services/EmployeePerformanceService.cs`
-5. `Persistence/PersistenceRegistration.cs`
-6. `Persistence/Database/Creator`
-7. `Persistence/Database/DbContexts`
-8. `DataArc.EntityFrameworkCore.Demo.Benchmark`
+```text
+Read employees from HR.
+Apply salary adjustment rules.
+Bulk write the adjusted data into Finance, IT, and Operations.
+Query the resulting data across all four contexts.
+Return structured execution results.
+```
 
 ---
 
-## What This Demo Proves
+## What DataArc Adds To EF Core
 
-The demo uses four isolated EF Core persistence boundaries:
+The demo proves four practical things:
+
+1. **Explicit execution boundaries**  
+   Application code chooses which EF Core boundary should execute the work.
+
+2. **Parallel bulk writes**  
+   One command pipeline writes to multiple EF Core contexts in parallel.
+
+3. **Cross-context reads**  
+   One query pipeline can compose a read model across multiple contexts.
+
+4. **Structured results**  
+   Command execution returns success/failure, affected records, and exception detail in one result shape.
+
+The central idea:
+
+```text
+Use EF Core.
+Keep DbContexts isolated.
+Choose execution boundaries explicitly.
+Build command/query pipelines.
+Execute the workflow.
+Receive structured results.
+```
+
+---
+
+## Benchmark Snapshot
+
+The benchmark inserts employee records into four EF Core contexts:
 
 - `HrDbContext`
 - `FinanceDbContext`
 - `ItDbContext`
 - `OperationsDbContext`
 
-The application workflow:
+Each benchmark case inserts `RecordCount` employees into each participating context.
 
-1. Creates the demo databases.
-2. Generates SQL scripts for the database operations.
-3. Seeds employee data into HR.
-4. Reads employees from HR.
-5. Applies a salary adjustment.
-6. Bulk writes adjusted data into Finance, IT, and Operations.
-7. Executes the command pipeline in parallel.
-8. Queries top-rated employees across all four contexts.
-9. Prints a short summary.
+```text
+Total inserted records = RecordCount x 4
+```
+
+| Method | Record Count Per Context | Bulk Batch Size | Total Inserted Records | Mean | StdDev | Allocated |
+|---|---:|---:|---:|---:|---:|---:|
+| ExecuteParallelBulkInsertAsync | 62,500 | 62,500 | 250,000 | 552.2 ms | 84.94 ms | 60.83 MB |
+| ExecuteParallelBulkInsertAsync | 125,000 | 62,500 | 500,000 | 818.4 ms | 90.35 ms | 121.19 MB |
+| ExecuteParallelBulkInsertAsync | 250,000 | 62,500 | 1,000,000 | 1,775.7 ms | 344.70 ms | 242.31 MB |
+
+These results are workload-specific evidence, not a universal performance guarantee. Hardware, SQL Server configuration, schema shape, indexes, batch size, runtime version, and database state all affect results.
+
+The useful signal is the execution shape: one explicit command pipeline, four EF Core contexts, parallel execution, structured result handling, and no reported lock contentions in this run.
+
+---
+
+## Why DataArc.EntityFrameworkCore Exists
+
+EF Core is excellent inside one `DbContext`.
+
+Many systems eventually need data workflows that move beyond one direct context call:
+
+- read from one database and write to another
+- import data into multiple tables or contexts
+- synchronize data between operational stores
+- build reporting or workflow projections
+- reconcile data across multiple persistence boundaries
+- bulk process scheduled jobs
+- compose read models from more than one EF Core context
+
+DataArc.EntityFrameworkCore gives those workflows an explicit C# execution model.
+
+It is designed for EF Core work that needs:
+
+- isolated context boundaries
+- command/query separation
+- bulk operations
+- parallel execution
+- cross-context reads
+- structured execution results
+- transaction-aware command flows
+- logging-friendly outcomes
+- high-volume scheduled jobs
+- predictable workflow execution
+
+Small CRUD applications can often be scaffolded, generated, and maintained with standard EF Core patterns.
+
+DataArc.EntityFrameworkCore adds the most value when the data work becomes coordinated: multiple boundaries, larger data movement, repeatable workflows, clear execution results, and predictable success or failure reporting.
+
+The value is giving EF Core work an explicit execution model.
+
+---
+
+## Demo Workflow
+
+The demo uses four isolated EF Core persistence boundaries:
+
+```text
+HrDbContext
+FinanceDbContext
+ItDbContext
+OperationsDbContext
+```
+
+The application flow:
+
+1. Deletes existing demo databases.
+2. Creates the demo databases.
+3. Generates SQL scripts for the database operations.
+4. Seeds employee data into HR.
+5. Reads employees from HR.
+6. Applies salary adjustment rules.
+7. Bulk writes adjusted data into Finance, IT, and Operations.
+8. Executes the command pipeline in parallel.
+9. Queries top-rated employees across all four contexts.
+10. Prints a short summary.
 
 ```mermaid
 flowchart LR
-    A[Program.cs] --> B[Finance Module]
-    B --> C[SalaryAdjustmentService]
-    B --> D[EmployeePerformanceService]
+    A[Program.cs] --> B[SalaryAdjustmentService]
+    A --> C[EmployeePerformanceService]
 
-    C --> Q[DataArc Query Pipeline]
-    C --> W[DataArc Command Pipeline]
-    D --> R[DataArc Cross-Context Query]
+    B --> Q[DataArc Query Pipeline]
+    B --> W[DataArc Command Pipeline]
+    C --> R[DataArc Cross-Context Query]
 
     Q --> HR[HrDbContext]
     W --> FIN[FinanceDbContext]
@@ -65,98 +153,164 @@ flowchart LR
     X --> Y[Structured Result]
 ```
 
-The central idea:
+---
 
-```text
-Keep EF Core.
-Keep DbContexts isolated.
-Choose the execution boundary explicitly.
-Build a command or query pipeline.
-Execute the workflow.
-Receive a structured result.
+## Application Shape
+
+`Program.cs` stays small.
+
+It prepares the demo databases, runs the salary adjustment workflow, then queries a concise result.
+
+```csharp
+const int batchSize = 100_000;
+
+var serviceProvider = new ServiceCollection()
+    .AddFinanceModule()
+    .BuildServiceProvider();
+
+var databaseCreators = new IDatabaseCreator[]
+{
+    serviceProvider.GetRequiredService<IFinanceDbCreator>(),
+    serviceProvider.GetRequiredService<IHrDbCreator>(),
+    serviceProvider.GetRequiredService<IItDbCreator>(),
+    serviceProvider.GetRequiredService<IOperationsDbCreator>()
+};
+
+var databaseSeeders = new IDatabaseSeeder[]
+{
+    serviceProvider.GetRequiredService<IHrDbSeeder>()
+};
+
+var salaryAdjustmentService =
+    serviceProvider.GetRequiredService<ISalaryAdjustmentService>();
+
+var employeePerformanceService =
+    serviceProvider.GetRequiredService<IEmployeePerformanceService>();
+
+await ResetDatabasesAsync(databaseCreators, databaseSeeders, batchSize);
+
+var processedCount = await salaryAdjustmentService
+    .ProcessEmployeeSalaryAdjustmentsAsync(
+        salaryAdjustmentBaseRate: 0.05m,
+        salaryThreshold: 10_000m,
+        batchSize);
+
+Console.WriteLine($"Processed salary adjustment records: {processedCount:N0}");
+
+var topRatedEmployees = await employeePerformanceService
+    .GetTopRatedEmployeesAsync(rating: 4.5);
 ```
+
+The repetitive bulk-operation detail belongs inside the use-case service, not in `Program.cs`.
 
 ---
 
-## Why DataArc.EntityFrameworkCore Exists
+## Salary Adjustment Use Case
 
-EF Core is excellent inside one `DbContext`.
+`SalaryAdjustmentService` reads from HR, applies the adjustment, then writes to three target contexts through one command pipeline.
 
-Real systems often need workflows across persistence boundaries:
+```mermaid
+sequenceDiagram
+    participant Salary as SalaryAdjustmentService
+    participant Query as DataArc Query Pipeline
+    participant Command as DataArc Command Pipeline
+    participant HR as HrDbContext
+    participant Finance as FinanceDbContext
+    participant IT as ItDbContext
+    participant Ops as OperationsDbContext
 
-- identity + licensing
-- products + packaging
-- pricing + entitlements
-- audit + activations
-- HR + finance + operations
-- modular monolith modules sharing one database
-- scheduled workloads that touch multiple bounded contexts
+    Salary->>Query: UseDbExecutionContext<IHrDbContext>()
+    Query->>HR: Read employees above salary threshold
+    HR-->>Salary: Employee list
 
-DataArc gives these workflows a C# execution model without forcing one giant `DbContext`, repository-per-table coordination, or handler-per-small-query sprawl.
+    Salary->>Salary: Apply salary adjustment
 
-DataArc is useful when you need:
+    Salary->>Command: AddBulk to Finance
+    Salary->>Command: AddBulk to IT
+    Salary->>Command: AddBulk to Operations
+    Salary->>Command: ExecuteParallelAsync()
 
-- modular EF Core context boundaries
-- command/query separation
-- bulk operations
-- cross-context workflows
-- parallel execution
-- structured execution results
-- transaction-aware command flows
-- logging-friendly outcomes
-- high-volume scheduled jobs
-- cross-context read models
+    Command->>Finance: Bulk insert
+    Command->>IT: Bulk insert
+    Command->>Ops: Bulk insert
+    Command-->>Salary: Structured execution result
+```
+
+Core shape:
+
+```csharp
+var employeesQuery = await _queryFactory.CreateQueryAsync();
+
+var employees = await employeesQuery
+    .UseDbExecutionContext<IHrDbContext>()
+        .ReadWhereAsync<Employee>(employee => employee.Salary > salaryThreshold);
+
+foreach (var employee in employees)
+{
+    employee.Salary += employee.Salary * salaryAdjustmentBaseRate;
+}
+
+var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
+
+commandBuilder
+    .UseDbExecutionContext<IFinanceDbContext>()
+        .AddBulk(employees, batchSize);
+
+commandBuilder
+    .UseDbExecutionContext<IItDbContext>()
+        .AddBulk(employees, batchSize);
+
+commandBuilder
+    .UseDbExecutionContext<IOperationsDbContext>()
+        .AddBulk(employees, batchSize);
+
+var command = await commandBuilder.BuildAsync();
+var commandResult = await command.ExecuteParallelAsync();
+
+if (!commandResult.Success)
+{
+    throw new InvalidOperationException(
+        $"Failed to process salary adjustments. {commandResult.Exception?.Message}");
+}
+
+return commandResult.TotalAffected;
+```
+
+The repeated `UseDbExecutionContext<T>()` calls are intentional. Each write target is explicit, visible, and independently routed.
 
 ---
 
-## Project Structure
+## Cross-Context Query Use Case
 
-```text
-DataArc.EntityFrameworkCore.Demo
-│
-├── Application
-│   └── Modules
-│       └── Finance
-│           ├── Features
-│           │   ├── SalaryAdjustments
-│           │   │   ├── Dtos
-│           │   │   │   └── EmployeeDto.cs
-│           │   │   └── Services
-│           │   │       ├── ISalaryAdjustmentService.cs
-│           │   │       └── SalaryAdjustmentService.cs
-│           │   └── EmployeePerformance
-│           │       └── Services
-│           │           ├── IEmployeePerformanceService.cs
-│           │           └── EmployeePerformanceService.cs
-│           └── Registration
-│               └── FinanceModuleRegistration.cs
-│
-├── Persistence
-│   ├── Database
-│   │   ├── Creator
-│   │   │   ├── FinanceDbCreator.cs
-│   │   │   ├── HrDbCreator.cs
-│   │   │   ├── ItDbCreator.cs
-│   │   │   └── OperationsDbCreator.cs
-│   │   ├── DbContexts
-│   │   │   ├── FinanceDbContext.cs
-│   │   │   ├── HrDbContext.cs
-│   │   │   ├── ItDbContext.cs
-│   │   │   └── OperationsDbContext.cs
-│   │   ├── DbModels
-│   │   │   ├── Employee.cs
-│   │   │   └── Employer.cs
-│   │   └── Seeder
-│   │       ├── HrDbSeeder.cs
-│   │       └── SeedDataGenerator.cs
-│   └── PersistenceRegistration.cs
-│
-└── Program.cs
+`EmployeePerformanceService` demonstrates a cross-context read model.
+
+It starts from HR employees above a rating threshold, joins related employees across Finance, IT, and Operations, then projects the result into a DTO.
+
+```csharp
+var topRatedEmployeesQuery = await _queryFactory.CreateQueryAsync();
+
+var topRatedEmployees = await topRatedEmployeesQuery
+    .UseDbExecutionContext<IHrDbContext, Employee>(employee => employee.Rating > rating)
+        .Join<IFinanceDbContext, Employee>(
+            bag => bag.Get<Employee>()!.Id,
+            financeEmployee => financeEmployee.Id)
+        .Join<IItDbContext, Employee>(
+            bag => bag.Get<Employee>()!.Id,
+            itEmployee => itEmployee.Id)
+        .Join<IOperationsDbContext, Employee>(
+            bag => bag.Get<Employee>()!.Id,
+            operationsEmployee => operationsEmployee.Id)
+    .Select(bag => new EmployeeDto
+    {
+        Id = bag.Get<Employee>()!.Id,
+        Name = bag.Get<Employee>()!.Name!,
+        Surname = bag.Get<Employee>()!.Surname!,
+        Salary = bag.Get<Employee>()!.Salary
+    })
+    .ToListAsync();
 ```
 
-The application module owns the use cases.
-
-The persistence layer owns EF Core contexts, database models, database creation, seeding, and DataArc execution context registration.
+This creates one read model from multiple isolated EF Core contexts without exposing the concrete `DbContext` implementations to application code.
 
 ---
 
@@ -166,31 +320,43 @@ The demo keeps concrete EF Core `DbContext` implementations internal to the pers
 
 Application code does not depend directly on `FinanceDbContext`, `HrDbContext`, `ItDbContext`, or `OperationsDbContext`.
 
-Instead, each context is exposed through a small public execution-context interface:
+Instead, each EF Core boundary is exposed through a small public execution-context interface.
+
+In DataArc, an execution context represents a logical boundary where work is performed. In this demo, each execution context is backed by an EF Core `DbContext`.
 
 ```csharp
-public interface IFinanceDbContext : IExecutionContext<FinanceDbContext>
+public interface IFinanceDbContext : IExecutionContext
 {
 }
 ```
 
-The concrete context can remain internal:
+The concrete context remains internal:
 
 ```csharp
 internal class FinanceDbContext : DbContext, IFinanceDbContext
 {
-    public FinanceDbContext(DbContextOptions<FinanceDbContext> options)
-        : base(options)
+    public FinanceDbContext(DbContextOptions<FinanceDbContext> dbContextOptions)
+        : base(dbContextOptions)
     {
     }
 
-    public DbSet<Employer> Employer { get; set; }
+    public DbSet<Employer>? Employer { get; set; }
 
-    public DbSet<Employee> Employee { get; set; }
+    public DbSet<Employee>? Employee { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder
+            .Entity<Employer>()
+            .Property(employer => employer.Description)
+            .HasColumnType("text");
+    }
 }
 ```
 
-Application services route work through the execution boundary:
+Application services route work through the public execution boundary:
 
 ```csharp
 commandBuilder
@@ -198,7 +364,7 @@ commandBuilder
         .AddBulk(employees, batchSize);
 ```
 
-This keeps persistence implementation details inside the persistence layer while giving application code explicit control over where work executes.
+This keeps EF Core implementation details inside the persistence layer while still allowing application code to choose exactly where work executes.
 
 ---
 
@@ -324,450 +490,56 @@ CREATE TABLE [employees].[Employees] (
 GO
 ```
 
-This is a supporting setup capability. The main demo value is still the command/query execution model.
-
 ---
 
-## Program Flow
-
-`Program.cs` keeps the demo path direct:
-
-```csharp
-var serviceProvider = new ServiceCollection()
-    .AddFinanceModule()
-    .BuildServiceProvider();
-
-var databaseCreators = new IDatabaseCreator[]
-{
-    serviceProvider.GetRequiredService<IFinanceDbCreator>(),
-    serviceProvider.GetRequiredService<IHrDbCreator>(),
-    serviceProvider.GetRequiredService<IItDbCreator>(),
-    serviceProvider.GetRequiredService<IOperationsDbCreator>()
-};
-
-var databaseSeeders = new IDatabaseSeeder[]
-{
-    serviceProvider.GetRequiredService<IHrDbSeeder>()
-};
-
-await ResetDatabasesAsync(databaseCreators, databaseSeeders, batchSize);
-```
-
-Only HR is seeded because the workflow starts from HR and writes adjusted data into Finance, IT, and Operations.
-
----
-
-## Salary Adjustment Use Case
-
-`SalaryAdjustmentService` reads employees from HR, applies a salary adjustment, then writes adjusted employee data into Finance, IT, and Operations.
-
-```mermaid
-sequenceDiagram
-    participant App as Program.cs
-    participant Salary as SalaryAdjustmentService
-    participant Query as DataArc Query Pipeline
-    participant Command as DataArc Command Pipeline
-    participant HR as HrDbContext
-    participant Finance as FinanceDbContext
-    participant IT as ItDbContext
-    participant Ops as OperationsDbContext
-
-    App->>Salary: ProcessEmployeeSalaryAdjustmentsAsync(...)
-    Salary->>Query: UseDbExecutionContext<IHrDbContext>()
-    Query->>HR: Read employees above salary threshold
-    HR-->>Salary: Employee list
-
-    Salary->>Salary: Apply salary adjustment
-
-    Salary->>Command: AddBulk to Finance
-    Salary->>Command: AddBulk to IT
-    Salary->>Command: AddBulk to Operations
-    Salary->>Command: ExecuteParallelAsync()
-
-    Command->>Finance: Bulk insert
-    Command->>IT: Bulk insert
-    Command->>Ops: Bulk insert
-
-    Finance-->>Command: Result
-    IT-->>Command: Result
-    Ops-->>Command: Result
-    Command-->>Salary: Structured execution result
-```
-
-Core code shape:
-
-```csharp
-var employeesQuery = await _queryFactory.CreateQueryAsync();
-
-var employees = await employeesQuery
-    .UseDbExecutionContext<IHrDbContext>()
-        .ReadWhereAsync<Employee>(employee => employee.Salary > salaryThreshold);
-
-foreach (var employee in employees)
-{
-    employee.Salary += employee.Salary * salaryAdjustmentBaseRate;
-}
-
-var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
-
-commandBuilder
-    .UseDbExecutionContext<IFinanceDbContext>()
-        .AddBulk(employees, batchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IItDbContext>()
-        .AddBulk(employees, batchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IOperationsDbContext>()
-        .AddBulk(employees, batchSize);
-
-var command = await commandBuilder.BuildAsync();
-var commandResult = await command.ExecuteParallelAsync();
-
-if (!commandResult.Success)
-{
-    throw new InvalidOperationException(
-        $"Failed to process salary adjustments. {commandResult.Exception?.Message}");
-}
-
-return commandResult.TotalAffected;
-```
-
-The service reads from one context and writes to three others through one command pipeline.
-
----
-
-## Employee Performance Query
-
-`EmployeePerformanceService` demonstrates a cross-context read model.
-
-It starts from HR employees above a rating threshold, joins matching employees across Finance, IT, and Operations, then projects into a DTO.
-
-```csharp
-var topRatedEmployeesQuery = await _queryFactory.CreateQueryAsync();
-
-var topRatedEmployees = await topRatedEmployeesQuery
-    .UseDbExecutionContext<IHrDbContext, Employee>(employee => employee.Rating > rating)
-        .Join<IFinanceDbContext, Employee>(
-            bag => bag.Get<Employee>()!.Id,
-            financeEmployee => financeEmployee.Id)
-        .Join<IItDbContext, Employee>(
-            bag => bag.Get<Employee>()!.Id,
-            itEmployee => itEmployee.Id)
-        .Join<IOperationsDbContext, Employee>(
-            bag => bag.Get<Employee>()!.Id,
-            operationsEmployee => operationsEmployee.Id)
-    .Select(bag => new EmployeeDto
-    {
-        Id = bag.Get<Employee>()!.Id,
-        Name = bag.Get<Employee>()!.Name!,
-        Surname = bag.Get<Employee>()!.Surname!,
-        Salary = bag.Get<Employee>()!.Salary!
-    })
-    .ToListAsync();
-```
-
-This shows the read side of the same idea:
+## Project Structure
 
 ```text
-Multiple isolated contexts.
-One explicit read model.
-One application feature.
+DataArc.EntityFrameworkCore.Demo
+│
+├── Application
+│   └── Modules
+│       └── Finance
+│           ├── Features
+│           │   ├── SalaryAdjustments
+│           │   │   ├── Dtos
+│           │   │   │   └── EmployeeDto.cs
+│           │   │   └── Services
+│           │   │       ├── ISalaryAdjustmentService.cs
+│           │   │       └── SalaryAdjustmentService.cs
+│           │   └── EmployeePerformance
+│           │       └── Services
+│           │           ├── IEmployeePerformanceService.cs
+│           │           └── EmployeePerformanceService.cs
+│           └── Registration
+│               └── FinanceModuleRegistration.cs
+│
+├── Persistence
+│   ├── Database
+│   │   ├── Creator
+│   │   │   ├── FinanceDbCreator.cs
+│   │   │   ├── HrDbCreator.cs
+│   │   │   ├── ItDbCreator.cs
+│   │   │   └── OperationsDbCreator.cs
+│   │   ├── DbContexts
+│   │   │   ├── FinanceDbContext.cs
+│   │   │   ├── HrDbContext.cs
+│   │   │   ├── ItDbContext.cs
+│   │   │   └── OperationsDbContext.cs
+│   │   ├── DbModels
+│   │   │   ├── Employee.cs
+│   │   │   └── Employer.cs
+│   │   └── Seeder
+│   │       ├── HrDbSeeder.cs
+│   │       └── SeedDataGenerator.cs
+│   └── PersistenceRegistration.cs
+│
+└── Program.cs
 ```
 
----
+The application project owns the use cases.
 
-## Benchmark
-
-The benchmark measures DataArc parallel bulk insert execution across four EF Core persistence boundaries:
-
-- `HrDbContext`
-- `FinanceDbContext`
-- `ItDbContext`
-- `OperationsDbContext`
-
-Each benchmark case inserts `RecordCount` employees into each participating context.
-
-```text
-Total inserted records = RecordCount x 4
-```
-
-Default benchmark shape:
-
-```csharp
-[Params(62_500, 125_000, 250_000)]
-public int RecordCount { get; set; }
-
-[Params(62_500)]
-public int BulkBatchSize { get; set; }
-```
-
-Execution shape:
-
-```csharp
-var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
-
-commandBuilder
-    .UseDbExecutionContext<IHrDbContext>()
-        .AddBulk(_benchmarkEmployees, BulkBatchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IFinanceDbContext>()
-        .AddBulk(_benchmarkEmployees, BulkBatchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IItDbContext>()
-        .AddBulk(_benchmarkEmployees, BulkBatchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IOperationsDbContext>()
-        .AddBulk(_benchmarkEmployees, BulkBatchSize);
-
-var command = await commandBuilder.BuildAsync();
-var commandResult = await command.ExecuteParallelAsync();
-```
-
-```mermaid
-flowchart LR
-    A[Benchmark Employee Data] --> B[DataArc Command Builder]
-
-    B --> HR[HrDbContext Bulk Insert]
-    B --> FIN[FinanceDbContext Bulk Insert]
-    B --> IT[ItDbContext Bulk Insert]
-    B --> OPS[OperationsDbContext Bulk Insert]
-
-    HR --> R[Structured Command Result]
-    FIN --> R
-    IT --> R
-    OPS --> R
-```
-
-### Benchmark Environment
-
-```text
-BenchmarkDotNet v0.15.8
-OS: Windows 11 25H2 / 2025 Update
-CPU: 13th Gen Intel Core i7-13700H 2.40GHz
-Cores: 14 physical, 20 logical
-.NET SDK: 10.0.300
-Runtime: .NET 8.0.27
-JIT: RyuJIT x64
-InvocationCount: 1
-IterationCount: 10
-WarmupCount: 1
-UnrollFactor: 1
-Diagnosers: MemoryDiagnoser, ThreadingDiagnoser
-```
-
-### Benchmark Results
-
-| Method | Record Count Per Context | Bulk Batch Size | Total Inserted Records | Mean | StdDev | Completed Work Items | Lock Contentions | Gen0 | Allocated |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| ExecuteParallelBulkInsertAsync | 62,500 | 62,500 | 250,000 | 552.2 ms | 84.94 ms | 19,309 | - | 5,000 | 60.83 MB |
-| ExecuteParallelBulkInsertAsync | 125,000 | 62,500 | 500,000 | 818.4 ms | 90.35 ms | 38,614 | - | 10,000 | 121.19 MB |
-| ExecuteParallelBulkInsertAsync | 250,000 | 62,500 | 1,000,000 | 1,775.7 ms | 344.70 ms | 77,974 | - | 20,000 | 242.31 MB |
-
-### Benchmark Trend
-
-```mermaid
-xychart-beta
-    title "Parallel bulk insert mean time"
-    x-axis ["250k", "500k", "1M"]
-    y-axis "Mean time in ms" 0 --> 2000
-    bar [552.2, 818.4, 1775.7]
-```
-
-```mermaid
-xychart-beta
-    title "Managed memory allocated per operation"
-    x-axis ["250k", "500k", "1M"]
-    y-axis "Allocated MB" 0 --> 260
-    bar [60.83, 121.19, 242.31]
-```
-
-### Benchmark Notes
-
-These results are workload-specific evidence, not a universal performance guarantee.
-
-Results depend on:
-
-- hardware
-- database provider
-- database location
-- schema shape
-- entity size
-- indexes
-- batch size
-- relationship graph complexity
-- runtime version
-- database state before each iteration
-- transaction behavior
-
-The useful engineering signal is not only elapsed time. The benchmark runs through a single explicit command pipeline across four context boundaries, with structured success/failure reporting and no reported lock contentions in this run.
-
----
-
-## Why Add DataArc.EntityFrameworkCore To Your Engineering Toolkit?
-
-### 1. Preserve Modular EF Core Boundaries
-
-Many systems use one normalized database while still needing separate logical EF Core boundaries.
-
-```text
-IdentityContext
-ProductsContext
-PackagingContext
-LicensingContext
-PricingContext
-AuditContext
-```
-
-DataArc lets teams preserve modular context boundaries without collapsing every model into one giant `DbContext`.
-
-### 2. Give Cross-Context Workflows An Execution Model
-
-Real workflows often need data from multiple persistence boundaries.
-
-DataArc gives those workflows a C# execution model across contexts.
-
-```text
-Read from one boundary.
-Write to another.
-Join across multiple boundaries.
-Return a structured result.
-```
-
-### 3. Coordinate Parallel Operations
-
-EF Core can run multiple `DbContext` instances in parallel when each path has its own context instance and lifecycle.
-
-DataArc turns the coordination into a command pipeline:
-
-```csharp
-var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
-
-commandBuilder
-    .UseDbExecutionContext<IFinanceDbContext>()
-        .AddBulk(financeEmployees, batchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IItDbContext>()
-        .AddBulk(itEmployees, batchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IOperationsDbContext>()
-        .AddBulk(operationsEmployees, batchSize);
-
-var command = await commandBuilder.BuildAsync();
-var result = await command.ExecuteParallelAsync();
-```
-
-### 4. Reduce Repository And Handler Coordination Sprawl
-
-Repositories, handlers, and CQRS request classes can be useful.
-
-The pain starts when every small data access variation becomes a new repository method, query class, command class, handler, and orchestration point.
-
-DataArc gives teams another option: compose against known EF Core execution boundaries through query and command builders.
-
-```text
-DbContexts are persistence boundaries.
-DataArc is the execution layer.
-Orchestrators are workflow boundaries.
-```
-
-### 5. Build Cross-Context Read Models
-
-DataArc supports cross-context read model composition using a bag pattern.
-
-Each join adds data to the bag. The final projection creates a workflow-specific read model.
-
-```csharp
-var rows = await query
-    .UseDbExecutionContext<IIntersectionContext, UserProduct>(
-        userProduct => userProduct.UserId == userId)
-    .Join<IProductsContext, Product>(
-        bag => bag.Get<UserProduct>()!.ProductId,
-        product => product.Id)
-    .Join<IPackagingContext, Package>(
-        bag => bag.Get<Product>()!.PackageId,
-        package => package.Id)
-    .Select(bag => new ProductPackageRow
-    {
-        ProductName = bag.Get<Product>()!.Name,
-        PackageName = bag.Get<Package>()!.Name
-    })
-    .ToListAsync();
-```
-
-### 6. Support High-Volume Scheduled Workloads
-
-Many systems run large data operations on a schedule:
-
-```text
-Month-end billing
-Year-end processing
-License renewals
-Entitlement recalculation
-Product imports
-Customer migrations
-Reconciliation jobs
-Audit/archive jobs
-Tenant provisioning
-Reporting snapshots
-```
-
-These jobs affect memory, CPU, database load, deployment sizing, and cost.
-
-DataArc is built for those moments.
-
----
-
-## When To Use Direct DbContext
-
-Use `DbContext` directly when the operation is simple and stays inside one persistence boundary.
-
-```csharp
-dbContext.Set<Employee>().Add(employee);
-await dbContext.SaveChangesAsync();
-```
-
-Use DataArc.EntityFrameworkCore when the workflow needs:
-
-- multiple contexts
-- bulk operations
-- parallel execution
-- structured execution results
-- context switching
-- cross-context read models
-- transaction-aware command flows
-- logging and performance visibility
-
-```text
-DbContext is excellent inside one persistence boundary.
-DataArc coordinates execution across boundaries.
-```
-
----
-
-## Where Orchestrators Fit
-
-DataArc.EntityFrameworkCore can be used directly in services, as this demo shows.
-
-When workflows become larger, move the workflow into **DataArc.Orchestrator**.
-
-For post-execution outcomes, use **DataArc.Observer**.
-
-```mermaid
-flowchart LR
-    A[Controller / Endpoint] --> B[Service]
-    B --> C[DataArc.EntityFrameworkCore]
-
-    B --> D[DataArc.Orchestrator]
-    D --> C
-    D --> E[DataArc.Observer]
-```
+The persistence project owns EF Core contexts, database models, database creation, seeding, and DataArc registration.
 
 ---
 
@@ -835,7 +607,52 @@ From the benchmark project:
 dotnet run -c Release --framework net8.0
 ```
 
+Default benchmark shape:
+
+```csharp
+[Params(62_500, 125_000, 250_000)]
+public int RecordCount { get; set; }
+
+[Params(62_500)]
+public int BulkBatchSize { get; set; }
+```
+
 BenchmarkDotNet will generate detailed output under the benchmark artifacts folder.
+
+### Benchmark Environment
+
+```text
+BenchmarkDotNet v0.15.8
+OS: Windows 11 25H2 / 2025 Update
+CPU: 13th Gen Intel Core i7-13700H 2.40GHz
+Cores: 14 physical, 20 logical
+.NET SDK: 10.0.300
+Runtime: .NET 8.0.27
+JIT: RyuJIT x64
+InvocationCount: 1
+IterationCount: 10
+WarmupCount: 1
+UnrollFactor: 1
+Diagnosers: MemoryDiagnoser, ThreadingDiagnoser
+```
+
+### Benchmark Trend
+
+```mermaid
+xychart-beta
+    title "Parallel bulk insert mean time"
+    x-axis ["250k", "500k", "1M"]
+    y-axis "Mean time in ms" 0 --> 2000
+    bar [552.2, 818.4, 1775.7]
+```
+
+```mermaid
+xychart-beta
+    title "Managed memory allocated per operation"
+    x-axis ["250k", "500k", "1M"]
+    y-axis "Allocated MB" 0 --> 260
+    bar [60.83, 121.19, 242.31]
+```
 
 ---
 
@@ -845,7 +662,6 @@ DataArc.EntityFrameworkCore supports a 14-day trial so teams can test real workl
 
 Use the trial to validate:
 
-- modular context boundaries
 - cross-context queries
 - command pipelines
 - bulk operations
@@ -854,25 +670,34 @@ Use the trial to validate:
 
 ---
 
+## Related DataArc Packages
+
+DataArc.EntityFrameworkCore can be used directly in services, as this demo shows.
+
+For larger workflow coordination, use **DataArc.Orchestrator**.
+
+For post-execution outcomes, use **DataArc.Observer**.
+
+This README focuses on the EF Core execution package. Broader workflow architecture belongs in the orchestration demo.
+
+---
+
 ## Summary
 
-DataArc.EntityFrameworkCore gives EF Core a deterministic execution layer for modular, high-throughput, multi-context systems.
+DataArc.EntityFrameworkCore gives EF Core an explicit execution layer for high-throughput workflows that cross `DbContext` boundaries.
 
 It helps teams:
 
 - keep concrete `DbContext` implementations internal
 - expose public execution-context interfaces
-- preserve modular context boundaries
-- create databases and generate scripts without EF Core migration files in this demo path
-- compose cross-context workflows
-- execute coordinated command pipelines
+- coordinate work across multiple EF Core contexts
+- execute bulk command pipelines
 - run parallel operations
-- reduce repository and handler coordination sprawl
-- build cross-context read models
-- run bulk workloads with controlled memory behavior
+- compose cross-context read models
+- create databases and generate scripts without EF Core migration files in this demo path
 - return structured execution results
 - log and measure workflow execution
 
-Most architectures define structure.
+**EF Core owns data access.**
 
 **DataArc controls execution.**
