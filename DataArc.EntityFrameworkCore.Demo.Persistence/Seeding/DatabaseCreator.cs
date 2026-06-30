@@ -33,7 +33,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Seeding
                         .IncludeDbContext<HrDbContext>()
                         .IncludeDbContext<ItDbContext>()
                         .IncludeDbContext<OperationsDbContext>()
-                        .Build(applyChanges: true, generateScripts: true); //Generates SQL scripts for the database changes and applies them to the databases. This is useful for debugging and auditing purposes.
+                        .Build(applyChanges:true);
 
                 // Drop and create databases
                 db.ExecuteCreate();

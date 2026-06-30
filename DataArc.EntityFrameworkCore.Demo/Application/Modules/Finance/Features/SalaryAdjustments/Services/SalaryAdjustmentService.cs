@@ -1,45 +1,22 @@
 ﻿using DataArc.Core;
-using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Features.SalaryAdjustments.Dtos;
+
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 
-namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
+namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Features.SalaryAdjustments.Services
 {
-    public class FinanceService : IFinanceService
+    internal class SalaryAdjustmentService : ISalaryAdjustmentService
     {
         private readonly ICommandFactory _commandFactory;
         private readonly IQueryFactory _queryFactory;
 
-        public FinanceService(IQueryFactory queryFactory, ICommandFactory commandFactory)
+        public SalaryAdjustmentService(ICommandFactory commandFactory, IQueryFactory queryFactory)
         {
-            _queryFactory = queryFactory;
             _commandFactory = commandFactory;
+            _queryFactory = queryFactory;
         }
 
-        public async Task<List<EmployeeDto>> GetTopRatedEmployeesAsync(double rating)
-        {
-            var topRatedEmployeesQuery = await _queryFactory.CreateQueryAsync();
-
-            var topRatedEmployees = await topRatedEmployeesQuery
-                .UseDbExecutionContext<IHrDbContext, Employee>(e => e.Rating > rating)
-                    .Join<IFinanceDbContext, Employee>
-                        (bag => bag.Get<Employee>()!.Id, f => f.Id)
-                    .Join<IItDbContext, Employee>
-                        (bag => bag.Get<Employee>()!.Id, i => i.Id)
-                    .Join<IOperationsDbContext, Employee>(bag => bag.Get<Employee>()!.Id, o => o.Id)
-                .Select(bag => new EmployeeDto()
-                {
-                    Id = bag.Get<Employee>()!.Id,
-                    Name = bag.Get<Employee>()!.Name!,
-                    Surname = bag.Get<Employee>()!.Surname!,
-                    Salary = bag.Get<Employee>()!.Salary!
-
-                }).ToListAsync();
-
-            return topRatedEmployees;
-        }
-
-        public async Task<int> ProcessEmployeeFinanceDataAsync(
+        public async Task<int> ProcessEmployeeSalaryAdjustmentsAsync(
             decimal salaryAdjustmentBaseRate, 
             decimal salaryThreshold, 
             int batchSize)
@@ -56,7 +33,8 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
                 employee.Salary += employee.Salary * salaryAdjustmentBaseRate;
             }
 
-            var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
+            var commandBuilder = await _commandFactory
+                .CreateCommandBuilderAsync();
 
             commandBuilder
                 .UseDbExecutionContext<IFinanceDbContext>()
@@ -72,7 +50,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services
 
             // Build the command builder pipeline and execute the command in parallel across the different contexts
             var command = await commandBuilder.BuildAsync();
-            var commandResult = await command.ExecuteParallelAsync();
+            var commandResult = await command.ExecuteAsync();
 
             // Check the command result for success and handle any errors or exceptions
             if (!commandResult.Success) {
