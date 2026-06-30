@@ -1,64 +1,42 @@
 ﻿using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
-using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Features.SalaryAdjustments.Services;
 using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Registration;
+using DataArc.EntityFrameworkCore.Demo.Application.Workers;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeder;
 
 const int batchSize = 100_000;
 
-var serviceProvider = new ServiceCollection()
-    .AddFinanceModule()
-    .BuildServiceProvider();
+var host = Host
+    .CreateDefaultBuilder(args)
+    .ConfigureServices(services =>
+    {
+        services
+            .AddFinanceModule()
+            .AddHostedService<DemoWorkflowWorker>();
+    })
+    .Build();
+
+using var scope = host.Services.CreateScope();
 
 var databaseCreators = new IDatabaseCreator[]
 {
-    serviceProvider.GetRequiredService<IFinanceDbCreator>(),
-    serviceProvider.GetRequiredService<IHrDbCreator>(),
-    serviceProvider.GetRequiredService<IItDbCreator>(),
-    serviceProvider.GetRequiredService<IOperationsDbCreator>()
+    scope.ServiceProvider.GetRequiredService<IFinanceDbCreator>(),
+    scope.ServiceProvider.GetRequiredService<IHrDbCreator>(),
+    scope.ServiceProvider.GetRequiredService<IItDbCreator>(),
+    scope.ServiceProvider.GetRequiredService<IOperationsDbCreator>()
 };
 
 var databaseSeeders = new IDatabaseSeeder[]
 {
-    serviceProvider.GetRequiredService<IHrDbSeeder>(),
+    scope.ServiceProvider.GetRequiredService<IHrDbSeeder>()
 };
-    
-var salaryAdjustmentService = serviceProvider.GetRequiredService<ISalaryAdjustmentService>();
-var employeePerformanceService = serviceProvider.GetRequiredService<IEmployeePerformanceService>();
 
 await ResetDatabasesAsync(databaseCreators, databaseSeeders, batchSize);
 
-decimal salaryAdjustmentBaseRate = 0.05m;
-decimal salaryThreshold = 10_000m;
-double ratingThreshold = 4.5;
-
-var processedCount = await salaryAdjustmentService
-    .ProcessEmployeeSalaryAdjustmentsAsync(
-        salaryAdjustmentBaseRate,
-        salaryThreshold,
-        batchSize);
-
-Console.WriteLine($"Processed salary adjustment records: {processedCount:N0}");
-
-if (processedCount > 0)
-{
-    var topRatedEmployees = await employeePerformanceService
-        .GetTopRatedEmployeesAsync(ratingThreshold);
-
-    var topRatedEmployee = topRatedEmployees
-        .OrderByDescending(employee => employee.Salary)
-        .FirstOrDefault();
-
-    Console.WriteLine();
-
-    Console.WriteLine(topRatedEmployee is null
-        ? "No top rated employees found."
-        : $"Top Rated Employee: {topRatedEmployee.Name} {topRatedEmployee.Surname}, " +
-          $"Salary: {topRatedEmployee.Salary:N2}, " +
-          $"Number of top rated employees: {topRatedEmployees.Count:N0}");
-}
+await host.RunAsync();
 
 Console.WriteLine();
 Console.WriteLine("Press any key to exit.");
@@ -87,7 +65,7 @@ static async Task ResetDatabasesAsync(
 
     foreach (var databaseSeeder in databaseSeeders)
     {
-        if(!await databaseSeeder.SeedDatabaseAsync(batchSize))
+        if (!await databaseSeeder.SeedDatabaseAsync(batchSize))
             throw new InvalidOperationException("Failed to seed the demo databases.");
     }
 

@@ -1,12 +1,14 @@
 # DataArc.EntityFrameworkCore
 
-> EF Core execution for workflows that need isolated `DbContext` boundaries, bulk operations, cross-context reads, parallel writes, and structured results.
+> EF Core execution for background workers, batch jobs, bulk operations, cross-context reads, parallel writes, and structured results.
 
-**DataArc.EntityFrameworkCore** utilises EF Core.
+**DataArc.EntityFrameworkCore** uses EF Core.
 
-It providates a dedicated execution layer that allows application code to coordinate data work across multiple `DbContext` boundaries without turning the workflow into a pile of repository calls, handler classes, or manual `DbContext` plumbing.
+It provides a dedicated execution layer that helps application code coordinate serious EF Core data workflows across multiple `DbContext` boundaries without turning the workflow into scattered repository calls, handler classes, or manual `DbContext` plumbing.
 
-This demo shows the product in a small finance-style workflow:
+This demo runs as a small .NET background worker.
+
+The worker executes a finance-style data workflow:
 
 ```text
 Read employees from HR.
@@ -32,7 +34,7 @@ The demo proves four practical things:
    One query pipeline can compose a read model across multiple contexts.
 
 4. **Structured results**  
-   Command execution returns success/failure, affected records, and exception detail in one result shape.
+   Command execution returns success or failure, affected records, and exception detail in one result shape.
 
 The central idea:
 
@@ -128,21 +130,23 @@ The application flow:
 2. Creates the demo databases.
 3. Generates SQL scripts for the database operations.
 4. Seeds employee data into HR.
-5. Reads employees from HR.
-6. Applies salary adjustment rules.
-7. Bulk writes adjusted data into Finance, IT, and Operations.
-8. Executes the command pipeline in parallel.
-9. Queries top-rated employees across all four contexts.
-10. Prints a short summary.
+5. Starts a .NET hosted worker.
+6. Reads employees from HR.
+7. Applies salary adjustment rules.
+8. Bulk writes adjusted data into Finance, IT, and Operations.
+9. Executes the command pipeline in parallel.
+10. Queries top-rated employees across all four contexts.
+11. Prints a short summary.
 
 ```mermaid
 flowchart LR
-    A[Program.cs] --> B[SalaryAdjustmentService]
-    A --> C[EmployeePerformanceService]
+    A[Program.cs] --> B[DemoWorkflowWorker]
+    B --> C[SalaryAdjustmentService]
+    B --> D[EmployeePerformanceService]
 
-    B --> Q[DataArc Query Pipeline]
-    B --> W[DataArc Command Pipeline]
-    C --> R[DataArc Cross-Context Query]
+    C --> Q[DataArc Query Pipeline]
+    C --> W[DataArc Command Pipeline]
+    D --> R[DataArc Cross-Context Query]
 
     Q --> HR[HrDbContext]
     W --> FIN[FinanceDbContext]
@@ -157,51 +161,122 @@ flowchart LR
 
 ## Application Shape
 
-`Program.cs` stays small.
+The demo uses the .NET generic host.
 
-It prepares the demo databases, runs the salary adjustment workflow, then queries a concise result.
+`Program.cs` configures services, prepares the demo databases, and starts the host. The hosted worker runs the actual data workflow.
+
+```text
+Program.cs = host setup + demo database preparation
+DemoWorkflowWorker = background data workflow runner
+SalaryAdjustmentService = read-transform-write workflow
+EmployeePerformanceService = cross-context read model
+Persistence = EF Core contexts, registration, seeding, and database creators
+```
+
+This shape is familiar to .NET developers because many real data workflows run as background jobs, scheduled workers, import/export processors, reconciliation jobs, reporting projection builders, or internal batch processes.
 
 ```csharp
 const int batchSize = 100_000;
 
-var serviceProvider = new ServiceCollection()
-    .AddFinanceModule()
-    .BuildServiceProvider();
+var host = Host
+    .CreateDefaultBuilder(args)
+    .ConfigureServices(services =>
+    {
+        services
+            .AddFinanceModule()
+            .AddHostedService<DemoWorkflowWorker>();
+    })
+    .Build();
+
+using var scope = host.Services.CreateScope();
 
 var databaseCreators = new IDatabaseCreator[]
 {
-    serviceProvider.GetRequiredService<IFinanceDbCreator>(),
-    serviceProvider.GetRequiredService<IHrDbCreator>(),
-    serviceProvider.GetRequiredService<IItDbCreator>(),
-    serviceProvider.GetRequiredService<IOperationsDbCreator>()
+    scope.ServiceProvider.GetRequiredService<IFinanceDbCreator>(),
+    scope.ServiceProvider.GetRequiredService<IHrDbCreator>(),
+    scope.ServiceProvider.GetRequiredService<IItDbCreator>(),
+    scope.ServiceProvider.GetRequiredService<IOperationsDbCreator>()
 };
 
 var databaseSeeders = new IDatabaseSeeder[]
 {
-    serviceProvider.GetRequiredService<IHrDbSeeder>()
+    scope.ServiceProvider.GetRequiredService<IHrDbSeeder>()
 };
-
-var salaryAdjustmentService =
-    serviceProvider.GetRequiredService<ISalaryAdjustmentService>();
-
-var employeePerformanceService =
-    serviceProvider.GetRequiredService<IEmployeePerformanceService>();
 
 await ResetDatabasesAsync(databaseCreators, databaseSeeders, batchSize);
 
-var processedCount = await salaryAdjustmentService
-    .ProcessEmployeeSalaryAdjustmentsAsync(
-        salaryAdjustmentBaseRate: 0.05m,
-        salaryThreshold: 10_000m,
-        batchSize);
-
-Console.WriteLine($"Processed salary adjustment records: {processedCount:N0}");
-
-var topRatedEmployees = await employeePerformanceService
-    .GetTopRatedEmployeesAsync(rating: 4.5);
+await host.RunAsync();
 ```
 
 The repetitive bulk-operation detail belongs inside the use-case service, not in `Program.cs`.
+
+---
+
+## Background Worker
+
+`DemoWorkflowWorker` calls the application services that use DataArc.EntityFrameworkCore.
+
+```csharp
+internal sealed class DemoWorkflowWorker : BackgroundService
+{
+    private const int BatchSize = 100_000;
+
+    private readonly ISalaryAdjustmentService _salaryAdjustmentService;
+    private readonly IEmployeePerformanceService _employeePerformanceService;
+    private readonly IHostApplicationLifetime _hostApplicationLifetime;
+
+    public DemoWorkflowWorker(
+        ISalaryAdjustmentService salaryAdjustmentService,
+        IEmployeePerformanceService employeePerformanceService,
+        IHostApplicationLifetime hostApplicationLifetime)
+    {
+        _salaryAdjustmentService = salaryAdjustmentService;
+        _employeePerformanceService = employeePerformanceService;
+        _hostApplicationLifetime = hostApplicationLifetime;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            var processedCount = await _salaryAdjustmentService
+                .ProcessEmployeeSalaryAdjustmentsAsync(
+                    salaryAdjustmentBaseRate: 0.05m,
+                    salaryThreshold: 10_000m,
+                    batchSize: BatchSize);
+
+            Console.WriteLine($"Processed salary adjustment records: {processedCount:N0}");
+
+            if (processedCount > 0)
+            {
+                var topRatedEmployees = await _employeePerformanceService
+                    .GetTopRatedEmployeesAsync(rating: 4.5);
+
+                var topRatedEmployee = topRatedEmployees
+                    .OrderByDescending(employee => employee.Salary)
+                    .FirstOrDefault();
+
+                Console.WriteLine();
+
+                Console.WriteLine(topRatedEmployee is null
+                    ? "No top rated employees found."
+                    : $"Top Rated Employee: {topRatedEmployee.Name} {topRatedEmployee.Surname}, " +
+                      $"Salary: {topRatedEmployee.Salary:N2}, " +
+                      $"Number of top rated employees: {topRatedEmployees.Count:N0}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("Demo workflow completed.");
+        }
+        finally
+        {
+            _hostApplicationLifetime.StopApplication();
+        }
+    }
+}
+```
+
+The worker is intentionally thin. It runs the workflow and leaves EF Core execution details inside the application services.
 
 ---
 
@@ -211,6 +286,7 @@ The repetitive bulk-operation detail belongs inside the use-case service, not in
 
 ```mermaid
 sequenceDiagram
+    participant Worker as DemoWorkflowWorker
     participant Salary as SalaryAdjustmentService
     participant Query as DataArc Query Pipeline
     participant Command as DataArc Command Pipeline
@@ -219,6 +295,7 @@ sequenceDiagram
     participant IT as ItDbContext
     participant Ops as OperationsDbContext
 
+    Worker->>Salary: ProcessEmployeeSalaryAdjustmentsAsync(...)
     Salary->>Query: UseDbExecutionContext<IHrDbContext>()
     Query->>HR: Read employees above salary threshold
     HR-->>Salary: Employee list
@@ -276,7 +353,7 @@ if (!commandResult.Success)
 return commandResult.TotalAffected;
 ```
 
-The repeated `UseDbExecutionContext<T>()` calls are intentional. Each write target is explicit, visible, and independently routed.
+The repeated `UseDbExecutionContext<T>()` calls are intentional. Each target is explicit, visible, and independently routed.
 
 ---
 
@@ -498,21 +575,23 @@ GO
 DataArc.EntityFrameworkCore.Demo
 │
 ├── Application
-│   └── Modules
-│       └── Finance
-│           ├── Features
-│           │   ├── SalaryAdjustments
-│           │   │   ├── Dtos
-│           │   │   │   └── EmployeeDto.cs
-│           │   │   └── Services
-│           │   │       ├── ISalaryAdjustmentService.cs
-│           │   │       └── SalaryAdjustmentService.cs
-│           │   └── EmployeePerformance
-│           │       └── Services
-│           │           ├── IEmployeePerformanceService.cs
-│           │           └── EmployeePerformanceService.cs
-│           └── Registration
-│               └── FinanceModuleRegistration.cs
+│   ├── Modules
+│   │   └── Finance
+│   │       ├── Features
+│   │       │   ├── SalaryAdjustments
+│   │       │   │   ├── Dtos
+│   │       │   │   │   └── EmployeeDto.cs
+│   │       │   │   └── Services
+│   │       │   │       ├── ISalaryAdjustmentService.cs
+│   │       │   │       └── SalaryAdjustmentService.cs
+│   │       │   └── EmployeePerformance
+│   │       │       └── Services
+│   │       │           ├── IEmployeePerformanceService.cs
+│   │       │           └── EmployeePerformanceService.cs
+│   │       └── Registration
+│   │           └── FinanceModuleRegistration.cs
+│   └── Workers
+│       └── DemoWorkflowWorker.cs
 │
 ├── Persistence
 │   ├── Database
@@ -537,7 +616,7 @@ DataArc.EntityFrameworkCore.Demo
 └── Program.cs
 ```
 
-The application project owns the use cases.
+The application project owns the worker and use-case services.
 
 The persistence project owns EF Core contexts, database models, database creation, seeding, and DataArc registration.
 
@@ -579,10 +658,12 @@ The application will:
 2. Create demo databases.
 3. Generate SQL scripts under the app output `Scripts` folder.
 4. Seed HR employee data.
-5. Run the salary adjustment workflow.
-6. Bulk distribute adjusted employee data into Finance, IT, and Operations.
-7. Query top-rated employee details.
-8. Print a summary.
+5. Start the hosted worker.
+6. Run the salary adjustment workflow.
+7. Bulk distribute adjusted employee data into Finance, IT, and Operations.
+8. Query top-rated employee details.
+9. Print a summary.
+10. Stop the host after the workflow completes.
 
 Expected summary shape:
 
@@ -593,6 +674,8 @@ Databases seeded successfully.
 Processed salary adjustment records: 300,000
 
 Top Rated Employee: Name12345 Surname12345, Salary: 151,234.56, Number of top rated employees: 1,234
+
+Demo workflow completed.
 
 Press any key to exit.
 ```
@@ -670,9 +753,19 @@ Use the trial to validate:
 
 ---
 
+## Boundary Note
+
+DataArc.EntityFrameworkCore is designed for controlled EF Core execution where an application is allowed to coordinate the participating contexts.
+
+It is not intended to bypass service ownership rules or encourage unrelated services to read and write each other's private databases directly.
+
+The goal is explicit execution, not hidden coupling.
+
+---
+
 ## Related DataArc Packages
 
-DataArc.EntityFrameworkCore can be used directly in services, as this demo shows.
+DataArc.EntityFrameworkCore can be used directly in background workers and application services, as this demo shows.
 
 For larger workflow coordination, use **DataArc.Orchestrator**.
 
@@ -701,3 +794,7 @@ It helps teams:
 **EF Core owns data access.**
 
 **DataArc controls execution.**
+
+---
+
+Learn more, start a trial, or purchase a license: [www.dataarc.dev](https://www.dataarc.dev)
