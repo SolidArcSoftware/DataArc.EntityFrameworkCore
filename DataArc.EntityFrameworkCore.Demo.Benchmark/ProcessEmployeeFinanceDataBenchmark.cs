@@ -20,18 +20,25 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
     [ThreadingDiagnoser]
     [SimpleJob]
     [WarmupCount(1)]
-    [IterationCount(4)]
+    [IterationCount(10)]
+    [InvocationCount(1)]
     [Config(typeof(BenchmarkConfig))]
     public class RawEmployeeBulkDataBenchmark
     {
+        private const int MaxRecordCount = 1_000_000;
+
         private IServiceProvider? _serviceProvider;
         private IDatabaseCreator? _databaseCreator;
         private ICommandFactory? _commandFactory;
-        private IReadOnlyList<Employee>? _employees;
 
-        [Params(10_000, 100_000, 250_000)]
+        private List<Employee> _allEmployees = [];
+        private List<Employee> _benchmarkEmployees = [];
+
+        [Params(250_000, 500_000, 1_000_000)]
         public int RecordCount { get; set; }
-        public int BulkBatchSize => RecordCount;
+
+        [Params(250_000)]
+        public int BulkBatchSize { get; set; }
 
         [GlobalSetup]
         public void GlobalSetup()
@@ -42,6 +49,10 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
 
             _databaseCreator = _serviceProvider.GetRequiredService<IDatabaseCreator>();
             _commandFactory = _serviceProvider.GetRequiredService<ICommandFactory>();
+
+            _allEmployees = SeedDataGenerator
+                .GenerateHrSeedData(MaxRecordCount)
+                .ToList();
         }
 
         [IterationSetup]
@@ -56,34 +67,40 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
             if (!_databaseCreator.EnsureCreated())
                 throw new InvalidOperationException("Failed to create benchmark databases.");
 
-            _employees = SeedDataGenerator.GenerateHrSeedData(RecordCount);
+            _benchmarkEmployees = _allEmployees
+                .Take(RecordCount)
+                .ToList();
         }
 
         [Benchmark]
         public async Task<int> ExecuteParallelBulkInsertAsync()
         {
-            var commandBuilder = await _commandFactory!.CreateCommandBuilderAsync();
+            if (_commandFactory == null)
+                throw new InvalidOperationException($"{nameof(ICommandFactory)} was not resolved.");
+
+            if (_benchmarkEmployees.Count == 0)
+                throw new InvalidOperationException("Benchmark employee data was not generated.");
+
+            var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
 
             if (commandBuilder == null)
                 throw new InvalidOperationException($"{nameof(commandBuilder)} was not resolved.");
 
-            if (_employees == null)
-                throw new InvalidOperationException("Benchmark employee data was not generated.");
-
             commandBuilder
                 .UseDbExecutionContext<IHrDbContext>()
-                    .AddBulk(_employees, BulkBatchSize);
+                    .AddBulk(_benchmarkEmployees, BulkBatchSize);
 
             commandBuilder
                 .UseDbExecutionContext<IFinanceDbContext>()
-                    .AddBulk(_employees, BulkBatchSize);
+                    .AddBulk(_benchmarkEmployees, BulkBatchSize);
 
-            commandBuilder.UseDbExecutionContext<IItDbContext>()
-                    .AddBulk(_employees, BulkBatchSize);
+            commandBuilder
+                .UseDbExecutionContext<IItDbContext>()
+                    .AddBulk(_benchmarkEmployees, BulkBatchSize);
 
             commandBuilder
                 .UseDbExecutionContext<IOperationsDbContext>()
-                    .AddBulk(_employees, BulkBatchSize);
+                    .AddBulk(_benchmarkEmployees, BulkBatchSize);
 
             var command = await commandBuilder.BuildAsync();
             var commandResult = await command.ExecuteParallelAsync();
@@ -100,8 +117,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         [GlobalCleanup]
         public void GlobalCleanup()
         {
-            //_databaseCreator?.EnsureDeleted(); 
-            // Cleanup if needed after all iterations are complete
+            //_databaseCreator?.EnsureDeleted();
         }
     }
 
@@ -144,7 +160,6 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
                 .Single(parameter => parameter.Name == "RecordCount");
 
             var recordCount = Convert.ToInt32(recordCountParameter.Value);
-
             var totalInsertedRecords = recordCount * _destinationContextCount;
 
             return totalInsertedRecords.ToString("N0");

@@ -1,4 +1,4 @@
-﻿using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Services;
+﻿using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Features.SalaryAdjustments.Services;
 using DataArc.EntityFrameworkCore.Demo.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,8 +10,9 @@ namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Registrat
         {
             // Register persistence layer for Finance module
             services.AddPersistence();
-            // Register FinanceService and its dependencies
-            services.AddScoped<IFinanceService, FinanceService>();
+            // Register Services
+            services.AddScoped<ISalaryAdjustmentService, SalaryAdjustmentService>();
+            services.AddScoped<IEmployeePerformanceService, EmployeePerformanceService>();
             return services;
         }
     }
