@@ -1,9 +1,10 @@
-﻿using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Features.SalaryAdjustments.Services;
-using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Registration;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Seeding;
-
-using Microsoft.EntityFrameworkCore.Storage;
+﻿using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+
+using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Features.SalaryAdjustments.Services;
+using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Registration;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeder;
 
 const int batchSize = 100_000;
 
@@ -11,13 +12,23 @@ var serviceProvider = new ServiceCollection()
     .AddFinanceModule()
     .BuildServiceProvider();
 
-var databaseCreator = serviceProvider.GetRequiredService<IDatabaseCreator>();
-var databaseSeeder = serviceProvider.GetRequiredService<IDatabaseSeeder>();
+var databaseCreators = new IDatabaseCreator[]
+{
+    serviceProvider.GetRequiredService<IFinanceDbCreator>(),
+    serviceProvider.GetRequiredService<IHrDbCreator>(),
+    serviceProvider.GetRequiredService<IItDbCreator>(),
+    serviceProvider.GetRequiredService<IOperationsDbCreator>()
+};
 
+var databaseSeeders = new IDatabaseSeeder[]
+{
+    serviceProvider.GetRequiredService<IHrDbSeeder>(),
+};
+    
 var salaryAdjustmentService = serviceProvider.GetRequiredService<ISalaryAdjustmentService>();
 var employeePerformanceService = serviceProvider.GetRequiredService<IEmployeePerformanceService>();
 
-await ResetDatabasesAsync(databaseCreator, databaseSeeder, batchSize);
+await ResetDatabasesAsync(databaseCreators, databaseSeeders, batchSize);
 
 decimal salaryAdjustmentBaseRate = 0.05m;
 decimal salaryThreshold = 10_000m;
@@ -54,22 +65,31 @@ Console.WriteLine("Press any key to exit.");
 Console.ReadKey();
 
 static async Task ResetDatabasesAsync(
-    IDatabaseCreator databaseCreator,
-    IDatabaseSeeder databaseSeeder,
+    IReadOnlyCollection<IDatabaseCreator> databaseCreators,
+    IReadOnlyCollection<IDatabaseSeeder> databaseSeeders,
     int batchSize)
 {
-    if (!databaseCreator.EnsureDeleted())
-        throw new InvalidOperationException("Failed to delete the demo databases.");
+    foreach (var databaseCreator in databaseCreators)
+    {
+        if (!databaseCreator.EnsureDeleted())
+            throw new InvalidOperationException($"Failed to delete database using {databaseCreator.GetType().Name}.");
+    }
 
     Console.WriteLine("Databases deleted successfully.");
 
-    if (!databaseCreator.EnsureCreated())
-        throw new InvalidOperationException("Failed to create the demo databases.");
+    foreach (var databaseCreator in databaseCreators)
+    {
+        if (!databaseCreator.EnsureCreated())
+            throw new InvalidOperationException($"Failed to create database using {databaseCreator.GetType().Name}.");
+    }
 
     Console.WriteLine("Databases created successfully.");
 
-    if (!await databaseSeeder.SeedDatabaseAsync(batchSize))
-        throw new InvalidOperationException("Failed to seed the demo databases.");
+    foreach (var databaseSeeder in databaseSeeders)
+    {
+        if(!await databaseSeeder.SeedDatabaseAsync(batchSize))
+            throw new InvalidOperationException("Failed to seed the demo databases.");
+    }
 
     Console.WriteLine("Databases seeded successfully.");
 }

@@ -1,14 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
+﻿using DataArc.Core;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeder;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
-
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Seeding;
-
-using DataArc.Core;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence
 {
@@ -49,8 +47,12 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence
                      });
                  });
 
-            services.TryAddScoped<IDatabaseCreator, DatabaseCreator>();
-            services.TryAddScoped<IDatabaseSeeder, DatabaseSeeder>();
+            services.TryAddScoped<IFinanceDbCreator, FinanceDbCreator>();
+            services.TryAddScoped<IHrDbCreator, HrDbCreator>();
+            services.TryAddScoped<IOperationsDbCreator,OperationsDbCreator>();
+            services.TryAddScoped<IItDbCreator, ItDbCreator>();
+
+            services.TryAddScoped<IHrDbSeeder, HrDbSeeder>();
 
             return services;
         }
