@@ -70,9 +70,9 @@ Total inserted records = RecordCount x 4
 
 | Method | Record Count Per Context | Total Inserted Records | Mean | StdDev | Completed Work Items | Lock Contentions | Gen0 | Allocated |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| ExecuteParallelBulkInsertAsync | 62,500 | 250,000 | 486.2 ms | 30.92 ms | 19,193 | - | 5,000 | 60.77 MB |
-| ExecuteParallelBulkInsertAsync | 125,000 | 500,000 | 887.7 ms | 159.61 ms | 38,051 | - | 10,000 | 120.93 MB |
-| ExecuteParallelBulkInsertAsync | 250,000 | 1,000,000 | 1,747.1 ms | 285.75 ms | 77,796 | - | 20,000 | 242.21 MB |
+| ExecuteParallelBulkInsertAsync | 62,500 | 250,000 | 543.5 ms | 43.35 ms | 19,109 | - | 5,000 | 60.73 MB |
+| ExecuteParallelBulkInsertAsync | 125,000 | 500,000 | 793.7 ms | 123.56 ms | 38,686 | - | 10,000 | 121.25 MB |
+| ExecuteParallelBulkInsertAsync | 250,000 | 1,000,000 | 1,879.3 ms | 194.56 ms | 77,531 | - | 20,000 | 242.11 MB |
 
 These results are workload-specific evidence, not a universal performance guarantee. Hardware, SQL Server configuration, schema shape, indexes, batch size, runtime version, and database state all affect results.
 
@@ -172,52 +172,68 @@ flowchart LR
 
 The demo uses the .NET generic host.
 
-`Program.cs` configures services, prepares the demo databases, and starts the host. The hosted worker runs the actual data workflow.
+`Program.cs` configures the generic host, registers the hosted worker, initializes the demo databases, and starts the host. The hosted worker runs the actual data workflow.
 
 ```text
-Program.cs = host setup + demo database preparation
+Program.cs = host setup + startup flow
+DemoDatabaseInitializer = demo database reset, create, and seed
 DemoWorkflowWorker = background data workflow runner
 SalaryAdjustmentService = read-transform-write workflow
 EmployeePerformanceService = cross-context read model
-Persistence = EF Core contexts, contracts, registration, seeding, and database creators
+Persistence = EF Core contracts, contexts, registration, database creation, seeding, and initialization
 ```
 
 This shape is familiar to .NET developers because many real data workflows run as background jobs, scheduled workers, import/export processors, reconciliation jobs, reporting projection builders, or internal batch processes.
 
 ```csharp
-const int batchSize = 100_000;
-
 var host = Host
     .CreateDefaultBuilder(args)
-    .ConfigureServices((context, services) =>
+    .ConfigureServices(services =>
     {
+        var configurationManager = new ConfigurationManager();
+
+        configurationManager
+            .AddJsonFile("appsettings.json", optional: false)
+            .Build();
+
         services
-            .AddFinanceModule(context.Configuration)
+            .AddFinanceModule(configurationManager)
             .AddHostedService<DemoWorkflowWorker>();
     })
     .Build();
 
 using var scope = host.Services.CreateScope();
 
-var databaseCreators = new IDatabaseCreator[]
-{
-    scope.ServiceProvider.GetRequiredService<IFinanceDbCreator>(),
-    scope.ServiceProvider.GetRequiredService<IHrDbCreator>(),
-    scope.ServiceProvider.GetRequiredService<IItDbCreator>(),
-    scope.ServiceProvider.GetRequiredService<IOperationsDbCreator>()
-};
-
-var databaseSeeders = new IDatabaseSeeder[]
-{
-    scope.ServiceProvider.GetRequiredService<IHrDbSeeder>()
-};
-
-await ResetDatabasesAsync(databaseCreators, databaseSeeders, batchSize);
+await DemoDatabaseInitializer.InitializeAsync(scope.ServiceProvider);
 
 await host.RunAsync();
+
+Console.WriteLine();
+Console.WriteLine("Press any key to exit.");
+Console.ReadKey();
 ```
 
-The repetitive bulk-operation detail belongs inside the use-case service, not in `Program.cs`.
+The database setup detail belongs in persistence. The workflow execution detail belongs inside the worker and use-case services, not in `Program.cs`.
+
+---
+
+## Demo Database Initialization
+
+`DemoDatabaseInitializer` lives in the persistence project because database reset, creation, script generation, and seeding are persistence setup concerns.
+
+`Program.cs` decides when the demo initialization runs. The persistence project owns how it runs.
+
+The initializer coordinates the individual database creators and seeders:
+
+```text
+FinanceDbCreator
+HrDbCreator
+ItDbCreator
+OperationsDbCreator
+HrDbSeeder
+```
+
+Keeping the creators separate makes the setup easier to read, easier to test, and easier to troubleshoot. The more advanced database builder composition is still available, although this demo introduces database creation one database at a time for lower-friction adoption.
 
 ---
 
@@ -608,6 +624,7 @@ DataArc.EntityFrameworkCore.Demo
 │       └── DemoWorkflowWorker.cs
 │
 ├── Persistence
+│   ├── DemoDatabaseInitializer.cs
 │   ├── Contracts
 │   │   ├── IFinanceDbContext.cs
 │   │   ├── IHrDbContext.cs
@@ -756,7 +773,7 @@ xychart-beta
     title "Parallel bulk insert mean time"
     x-axis ["250k", "500k", "1M"]
     y-axis "Mean time in ms" 0 --> 2000
-    bar [486.2, 887.7, 1747.1]
+    bar [543.5, 793.7, 1879.3]
 ```
 
 ```mermaid
@@ -764,7 +781,7 @@ xychart-beta
     title "Managed memory allocated per operation"
     x-axis ["250k", "500k", "1M"]
     y-axis "Allocated MB" 0 --> 260
-    bar [60.77, 120.93, 242.21]
+    bar [60.73, 121.25, 242.11]
 ```
 
 ---
