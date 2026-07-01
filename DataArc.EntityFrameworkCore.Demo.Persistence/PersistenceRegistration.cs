@@ -1,12 +1,14 @@
-﻿using DataArc.Core;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeder;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+
+using DataArc.Core;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeder;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence
 {
@@ -17,12 +19,8 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence
             builder.AddConsole();
         });
 
-        public static IServiceCollection AddPersistence(this IServiceCollection services)
+        public static IServiceCollection AddPersistence(this IServiceCollection services, ConfigurationManager configurationManager)
         {
-            var configurationManager = new ConfigurationManager();
-            configurationManager.AddJsonFile("appsettings.json", optional: false)
-                          .Build();
-
             services
                  .AddDataArcCore()
                  .ConfigureDataArc(provider =>

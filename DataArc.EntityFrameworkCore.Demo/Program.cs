@@ -6,6 +6,7 @@ using DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Registration;
 using DataArc.EntityFrameworkCore.Demo.Application.Workers;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeder;
+using Microsoft.Extensions.Configuration;
 
 const int batchSize = 100_000;
 
@@ -13,8 +14,13 @@ var host = Host
     .CreateDefaultBuilder(args)
     .ConfigureServices(services =>
     {
+        var configurationManager = new ConfigurationManager();
+        configurationManager
+            .AddJsonFile("appsettings.json", optional: false)
+            .Build();
+
         services
-            .AddFinanceModule()
+            .AddFinanceModule(configurationManager)
             .AddHostedService<DemoWorkflowWorker>();
     })
     .Build();

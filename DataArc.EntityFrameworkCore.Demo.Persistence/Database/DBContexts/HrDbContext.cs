@@ -1,13 +1,9 @@
-﻿using DataArc.Core;
+﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts
 {
-    public interface IHrDbContext : IExecutionContext
-    {
-    }
-
     internal class HrDbContext : DbContext, IHrDbContext
     {
         public HrDbContext(DbContextOptions<HrDbContext> dbContextOptions) 
