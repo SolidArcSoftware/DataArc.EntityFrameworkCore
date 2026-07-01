@@ -22,4 +22,10 @@
     <ProjectReference Include="..\DataArc.EntityFrameworkCore.Demo.Persistence\DataArc.EntityFrameworkCore.Demo.Persistence.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

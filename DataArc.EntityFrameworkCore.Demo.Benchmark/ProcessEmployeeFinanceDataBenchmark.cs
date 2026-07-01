@@ -11,9 +11,10 @@ using BenchmarkDotNet.Running;
 using DataArc.Core;
 using DataArc.EntityFrameworkCore.Demo.Persistence;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Utils;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
+using Microsoft.Extensions.Configuration;
 
 namespace DataArc.EntityFrameworkCore.Demo.Benchmark
 {
@@ -38,14 +39,19 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         [Params(62_500, 125_000, 250_000)]
         public int RecordCount { get; set; }
 
-        [Params(62_500)]
-        public int BulkBatchSize { get; set; }
+        //[Params(62_500)] 
+        public int BulkBatchSize => MaxRecordCount;
 
         [GlobalSetup]
         public void GlobalSetup()
         {
+            var configurationManager = new ConfigurationManager();
+            configurationManager
+                .AddJsonFile("appsettings.json", optional: false)
+                .Build();
+
             _serviceProvider = new ServiceCollection()
-                .AddPersistence()
+                .AddPersistence(configurationManager)
                 .BuildServiceProvider();
 
             _databaseCreators =

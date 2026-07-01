@@ -4,7 +4,7 @@
 
 **DataArc.EntityFrameworkCore** uses EF Core.
 
-It provides a dedicated execution layer that helps application code coordinate serious EF Core data workflows across multiple `DbContext` boundaries without turning the workflow into scattered repository calls, handler classes, or manual `DbContext` plumbing.
+It provides a dedicated execution layer that helps application code coordinate serious EF Core data workflows across multiple `DbContext` boundaries without turning the workflow into scattered repository calls, handler classes, one-off bulk extensions, or manual `DbContext` plumbing.
 
 This demo runs as a small .NET background worker.
 
@@ -47,6 +47,10 @@ Execute the workflow.
 Receive structured results.
 ```
 
+A .NET `BackgroundService` gives the workflow a familiar home.
+
+DataArc.EntityFrameworkCore gives the workflow its execution model.
+
 ---
 
 ## Benchmark Snapshot
@@ -64,11 +68,11 @@ Each benchmark case inserts `RecordCount` employees into each participating cont
 Total inserted records = RecordCount x 4
 ```
 
-| Method | Record Count Per Context | Bulk Batch Size | Total Inserted Records | Mean | StdDev | Allocated |
-|---|---:|---:|---:|---:|---:|---:|
-| ExecuteParallelBulkInsertAsync | 62,500 | 62,500 | 250,000 | 552.2 ms | 84.94 ms | 60.83 MB |
-| ExecuteParallelBulkInsertAsync | 125,000 | 62,500 | 500,000 | 818.4 ms | 90.35 ms | 121.19 MB |
-| ExecuteParallelBulkInsertAsync | 250,000 | 62,500 | 1,000,000 | 1,775.7 ms | 344.70 ms | 242.31 MB |
+| Method | Record Count Per Context | Total Inserted Records | Mean | StdDev | Completed Work Items | Lock Contentions | Gen0 | Allocated |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ExecuteParallelBulkInsertAsync | 62,500 | 250,000 | 486.2 ms | 30.92 ms | 19,193 | - | 5,000 | 60.77 MB |
+| ExecuteParallelBulkInsertAsync | 125,000 | 500,000 | 887.7 ms | 159.61 ms | 38,051 | - | 10,000 | 120.93 MB |
+| ExecuteParallelBulkInsertAsync | 250,000 | 1,000,000 | 1,747.1 ms | 285.75 ms | 77,796 | - | 20,000 | 242.21 MB |
 
 These results are workload-specific evidence, not a universal performance guarantee. Hardware, SQL Server configuration, schema shape, indexes, batch size, runtime version, and database state all affect results.
 
@@ -90,7 +94,11 @@ Many systems eventually need data workflows that move beyond one direct context 
 - bulk process scheduled jobs
 - compose read models from more than one EF Core context
 
-DataArc.EntityFrameworkCore gives those workflows an explicit C# execution model.
+Plain EF Core does not provide native high-throughput bulk insert as a first-class API.
+
+Third-party bulk libraries can add bulk methods to a `DbContext`, although they do not provide a full execution pipeline across multiple EF Core context boundaries.
+
+DataArc.EntityFrameworkCore provides the coordination layer: command/query pipelines, explicit execution contexts, parallel execution, affected-record aggregation, failure handling, and structured results.
 
 It is designed for EF Core work that needs:
 
@@ -137,6 +145,7 @@ The application flow:
 9. Executes the command pipeline in parallel.
 10. Queries top-rated employees across all four contexts.
 11. Prints a short summary.
+12. Stops the host after the workflow completes.
 
 ```mermaid
 flowchart LR
@@ -170,7 +179,7 @@ Program.cs = host setup + demo database preparation
 DemoWorkflowWorker = background data workflow runner
 SalaryAdjustmentService = read-transform-write workflow
 EmployeePerformanceService = cross-context read model
-Persistence = EF Core contexts, registration, seeding, and database creators
+Persistence = EF Core contexts, contracts, registration, seeding, and database creators
 ```
 
 This shape is familiar to .NET developers because many real data workflows run as background jobs, scheduled workers, import/export processors, reconciliation jobs, reporting projection builders, or internal batch processes.
@@ -180,10 +189,10 @@ const int batchSize = 100_000;
 
 var host = Host
     .CreateDefaultBuilder(args)
-    .ConfigureServices(services =>
+    .ConfigureServices((context, services) =>
     {
         services
-            .AddFinanceModule()
+            .AddFinanceModule(context.Configuration)
             .AddHostedService<DemoWorkflowWorker>();
     })
     .Build();
@@ -391,23 +400,24 @@ This creates one read model from multiple isolated EF Core contexts without expo
 
 ---
 
-## Internal DbContexts, Public Execution Boundaries
+## Public Execution Contracts, Internal DbContexts
 
-The demo keeps concrete EF Core `DbContext` implementations internal to the persistence project.
+The demo exposes each EF Core boundary through a public execution-context contract.
 
-Application code does not depend directly on `FinanceDbContext`, `HrDbContext`, `ItDbContext`, or `OperationsDbContext`.
+Application code depends on these contracts, not on the concrete `DbContext` implementations.
 
-Instead, each EF Core boundary is exposed through a small public execution-context interface.
-
-In DataArc, an execution context represents a logical boundary where work is performed. In this demo, each execution context is backed by an EF Core `DbContext`.
+The contracts define the DataArc execution boundaries and expose the EF Core sets available through those boundaries.
 
 ```csharp
 public interface IFinanceDbContext : IExecutionContext
 {
+    DbSet<Employer>? Employer { get; set; }
+
+    DbSet<Employee>? Employee { get; set; }
 }
 ```
 
-The concrete context remains internal:
+The concrete `DbContext` implementation remains internal to the persistence project:
 
 ```csharp
 internal class FinanceDbContext : DbContext, IFinanceDbContext
@@ -433,7 +443,7 @@ internal class FinanceDbContext : DbContext, IFinanceDbContext
 }
 ```
 
-Application services route work through the public execution boundary:
+DataArc uses the public execution contract to route work to the registered EF Core implementation:
 
 ```csharp
 commandBuilder
@@ -441,13 +451,17 @@ commandBuilder
         .AddBulk(employees, batchSize);
 ```
 
-This keeps EF Core implementation details inside the persistence layer while still allowing application code to choose exactly where work executes.
+This keeps the concrete EF Core implementation hidden while giving the application a clear execution boundary to target.
 
 ---
 
 ## DataArc Registration
 
 Each EF Core context is registered as a DataArc database execution context.
+
+This demo uses SQL Server.
+
+The worker and application services do not configure SQL Server directly. They target DataArc execution contexts. SQL Server connection strings and EF Core provider configuration stay in `PersistenceRegistration.cs`.
 
 ```csharp
 services.AddDataArcCore();
@@ -474,9 +488,9 @@ services.ConfigureDataArc(dataArc =>
 The registration tells DataArc:
 
 ```text
-This interface is the execution boundary.
+This contract is the execution boundary.
 This concrete DbContext is the EF Core implementation.
-This connection string points to the target database.
+This connection string points to the SQL Server database.
 ```
 
 ---
@@ -594,6 +608,11 @@ DataArc.EntityFrameworkCore.Demo
 │       └── DemoWorkflowWorker.cs
 │
 ├── Persistence
+│   ├── Contracts
+│   │   ├── IFinanceDbContext.cs
+│   │   ├── IHrDbContext.cs
+│   │   ├── IItDbContext.cs
+│   │   └── IOperationsDbContext.cs
 │   ├── Database
 │   │   ├── Creator
 │   │   │   ├── FinanceDbCreator.cs
@@ -618,7 +637,19 @@ DataArc.EntityFrameworkCore.Demo
 
 The application project owns the worker and use-case services.
 
-The persistence project owns EF Core contexts, database models, database creation, seeding, and DataArc registration.
+The persistence project owns EF Core contracts, contexts, database models, database creation, seeding, and DataArc registration.
+
+The demo application and benchmark project both reference the persistence project directly.
+
+```text
+DataArc.EntityFrameworkCore.Demo
+    -> DataArc.EntityFrameworkCore.Demo.Persistence
+
+DataArc.EntityFrameworkCore.Demo.Benchmark
+    -> DataArc.EntityFrameworkCore.Demo.Persistence
+```
+
+The benchmark references the persistence project directly so it measures the DataArc EF Core execution path without depending on the demo application shell.
 
 ---
 
@@ -626,20 +657,17 @@ The persistence project owns EF Core contexts, database models, database creatio
 
 ### 1. Configure Connection Strings
 
-Update the SQL Server connection strings in `PersistenceRegistration.cs`.
+Update the SQL Server connection strings in `appsettings.json`.
 
-```csharp
-var financeConnectionString =
-    "Server=YOUR_SERVER;Database=FinanceDb;Integrated Security=true;TrustServerCertificate=True;";
-
-var hrConnectionString =
-    "Server=YOUR_SERVER;Database=HrDb;Integrated Security=true;TrustServerCertificate=True;";
-
-var itConnectionString =
-    "Server=YOUR_SERVER;Database=ItDb;Integrated Security=true;TrustServerCertificate=True;";
-
-var operationsConnectionString =
-    "Server=YOUR_SERVER;Database=OperationsDb;Integrated Security=true;TrustServerCertificate=True;";
+```json
+{
+  "ConnectionStrings": {
+    "FinanceDb": "Server=YOUR_SERVER;Database=FinanceDb;Integrated Security=true;TrustServerCertificate=True;",
+    "HrDb": "Server=YOUR_SERVER;Database=HrDb;Integrated Security=true;TrustServerCertificate=True;",
+    "ItDb": "Server=YOUR_SERVER;Database=ItDb;Integrated Security=true;TrustServerCertificate=True;",
+    "OperationsDb": "Server=YOUR_SERVER;Database=OperationsDb;Integrated Security=true;TrustServerCertificate=True;"
+  }
+}
 ```
 
 ### 2. Run The Application
@@ -690,6 +718,8 @@ From the benchmark project:
 dotnet run -c Release --framework net8.0
 ```
 
+The benchmark project has its own `appsettings.json` and references the persistence project directly.
+
 Default benchmark shape:
 
 ```csharp
@@ -726,7 +756,7 @@ xychart-beta
     title "Parallel bulk insert mean time"
     x-axis ["250k", "500k", "1M"]
     y-axis "Mean time in ms" 0 --> 2000
-    bar [552.2, 818.4, 1775.7]
+    bar [486.2, 887.7, 1747.1]
 ```
 
 ```mermaid
@@ -734,7 +764,7 @@ xychart-beta
     title "Managed memory allocated per operation"
     x-axis ["250k", "500k", "1M"]
     y-axis "Allocated MB" 0 --> 260
-    bar [60.83, 121.19, 242.31]
+    bar [60.77, 120.93, 242.21]
 ```
 
 ---
@@ -781,8 +811,7 @@ DataArc.EntityFrameworkCore gives EF Core an explicit execution layer for high-t
 
 It helps teams:
 
-- keep concrete `DbContext` implementations internal
-- expose public execution-context interfaces
+- define public execution contracts while keeping concrete `DbContext` implementations internal
 - coordinate work across multiple EF Core contexts
 - execute bulk command pipelines
 - run parallel operations

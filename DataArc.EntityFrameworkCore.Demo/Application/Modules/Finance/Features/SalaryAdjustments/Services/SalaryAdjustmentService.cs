@@ -1,6 +1,5 @@
 ﻿using DataArc.Core;
-
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 
 namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Finance.Features.SalaryAdjustments.Services

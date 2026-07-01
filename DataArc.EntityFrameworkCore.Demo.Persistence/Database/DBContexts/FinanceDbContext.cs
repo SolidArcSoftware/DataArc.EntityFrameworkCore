@@ -1,14 +1,9 @@
-﻿using DataArc.Core;
+﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts
 {
-    public interface IFinanceDbContext : IExecutionContext
-    {
-       
-    }
-
     internal class FinanceDbContext : DbContext, IFinanceDbContext
     {
         public FinanceDbContext(DbContextOptions<FinanceDbContext> dbContextOptions) 
