@@ -1,0 +1,42 @@
+name: PR Build
+
+on:
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Restore and Build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDKs
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            7.0.x
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Show .NET info
+        run: dotnet --info
+
+      - name: Show NuGet sources
+        run: dotnet nuget list source
+
+      - name: Restore from nuget.org
+        run: dotnet restore --configfile nuget.config
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore

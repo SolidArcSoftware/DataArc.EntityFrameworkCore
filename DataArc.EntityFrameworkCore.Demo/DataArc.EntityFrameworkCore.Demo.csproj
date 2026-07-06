@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFrameworks>net6.0;net7.0;net8.0;net9.0;net10.0</TargetFrameworks>
+    <NoWarn>$(NoWarn);NETSDK1138</NoWarn>
+    <NuGetAudit>false</NuGetAudit>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DataArc.EntityFrameworkCore.Demo.Contracts\DataArc.EntityFrameworkCore.Demo.Contracts.csproj" />
+    <ProjectReference Include="..\DataArc.EntityFrameworkCore.Demo.Persistence\DataArc.EntityFrameworkCore.Demo.Persistence.csproj" />
+  </ItemGroup>
+
+</Project>
