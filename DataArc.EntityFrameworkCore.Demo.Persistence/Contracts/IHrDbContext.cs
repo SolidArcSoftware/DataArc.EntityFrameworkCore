@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Contracts
 {
-    public interface IHrDbContext : IExecutionContext
+    public interface IMicrosoftDbContext : IExecutionContext
     {
         DbSet<Employer>? Employer { get; set; }
         DbSet<Employee>? Employee { get; set; }

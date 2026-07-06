@@ -39,7 +39,6 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         [Params(62_500, 125_000, 250_000)]
         public int RecordCount { get; set; }
 
-        //[Params(62_500)] 
         public int BulkBatchSize => MaxRecordCount;
 
         [GlobalSetup]
@@ -56,10 +55,10 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
 
             _databaseCreators =
             [
-                _serviceProvider.GetRequiredService<IFinanceDbCreator>(),
-                _serviceProvider.GetRequiredService<IHrDbCreator>(),
-                _serviceProvider.GetRequiredService<IItDbCreator>(),
-                _serviceProvider.GetRequiredService<IOperationsDbCreator>()
+                _serviceProvider.GetRequiredService<IGoogleDbCreator>(),
+                _serviceProvider.GetRequiredService<IMicrosoftDbCreator>(),
+                _serviceProvider.GetRequiredService<IOpenAiDbCreator>(),
+                _serviceProvider.GetRequiredService<ISASDbCreator>()
             ];
 
             _commandFactory = _serviceProvider.GetRequiredService<ICommandFactory>();
@@ -109,19 +108,19 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
                 throw new InvalidOperationException($"{nameof(commandBuilder)} was not resolved.");
 
             commandBuilder
-                .UseDbExecutionContext<IHrDbContext>()
+                .UseDbExecutionContext<IGoogleDbContext>()
                     .AddBulk(_benchmarkEmployees, BulkBatchSize);
 
             commandBuilder
-                .UseDbExecutionContext<IFinanceDbContext>()
+                .UseDbExecutionContext<IOpenAIDbContext>()
                     .AddBulk(_benchmarkEmployees, BulkBatchSize);
 
             commandBuilder
-                .UseDbExecutionContext<IItDbContext>()
+                .UseDbExecutionContext<IMicrosoftDbContext>()
                     .AddBulk(_benchmarkEmployees, BulkBatchSize);
 
             commandBuilder
-                .UseDbExecutionContext<IOperationsDbContext>()
+                .UseDbExecutionContext<ISolidArcDbContext>()
                     .AddBulk(_benchmarkEmployees, BulkBatchSize);
 
             var command = await commandBuilder.BuildAsync();

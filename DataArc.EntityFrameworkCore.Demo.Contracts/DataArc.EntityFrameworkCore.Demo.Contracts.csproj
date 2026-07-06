@@ -30,8 +30,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DataArc.EntityFrameworkCore.Demo.Contracts\DataArc.EntityFrameworkCore.Demo.Contracts.csproj" />
-    <ProjectReference Include="..\DataArc.EntityFrameworkCore.Demo.Persistence\DataArc.EntityFrameworkCore.Demo.Persistence.csproj" />
+    <Compile Remove="Application\Modules\Google\Registration\**" />
+    <EmbeddedResource Remove="Application\Modules\Google\Registration\**" />
+    <None Remove="Application\Modules\Google\Registration\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Application\Modules\Google\Features\" />
   </ItemGroup>
 
 </Project>

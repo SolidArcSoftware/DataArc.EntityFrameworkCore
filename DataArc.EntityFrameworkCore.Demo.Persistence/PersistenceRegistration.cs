@@ -8,7 +8,7 @@ using DataArc.Core;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeder;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeders;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence
 {
@@ -27,30 +27,33 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence
                  {
                      provider.UseEntityFrameworkCore(context =>
                      {
-                         context.AddDbExecutionContext<IFinanceDbContext, FinanceDbContext>(options => options
-                                .UseSqlServer(configurationManager.GetConnectionString("FinanceDb"))
+                         context.AddDbExecutionContext<IGoogleDbContext, GoogleDbContext>(options => options
+                                .UseSqlServer(configurationManager.GetConnectionString("GoogleDb"))
                                 .UseLoggerFactory(factory));
 
-                         context.AddDbExecutionContext<IHrDbContext, HrDbContext>(options => options
-                                .UseSqlServer(configurationManager.GetConnectionString("HrDb"))
+                         context.AddDbExecutionContext<IMicrosoftDbContext, MicrosoftDbContext>(options => options
+                                .UseSqlServer(configurationManager.GetConnectionString("MicrosoftDb"))
                                 .UseLoggerFactory(factory));
 
-                         context.AddDbExecutionContext<IItDbContext, ItDbContext>(options => options
-                                .UseSqlServer(configurationManager.GetConnectionString("ItDb"))
+                         context.AddDbExecutionContext<IOpenAIDbContext, OpenAIDbContext>(options => options
+                                .UseSqlServer(configurationManager.GetConnectionString("OpenAiDb"))
                                 .UseLoggerFactory(factory));
 
-                         context.AddDbExecutionContext<IOperationsDbContext, OperationsDbContext>(options => options
-                                .UseSqlServer(configurationManager.GetConnectionString("OperationsDb"))
+                         context.AddDbExecutionContext<ISolidArcDbContext, SolidArcDbContext>(options => options
+                                .UseSqlServer(configurationManager.GetConnectionString("SASDb"))
                                 .UseLoggerFactory(factory));
                      });
                  });
 
-            services.TryAddScoped<IFinanceDbCreator, FinanceDbCreator>();
-            services.TryAddScoped<IHrDbCreator, HrDbCreator>();
-            services.TryAddScoped<IOperationsDbCreator,OperationsDbCreator>();
-            services.TryAddScoped<IItDbCreator, ItDbCreator>();
+            services.TryAddScoped<IGoogleDbCreator, GoogleDbCreator>();
+            services.TryAddScoped<IMicrosoftDbCreator, MicrosoftDbCreator>();
+            services.TryAddScoped<IOpenAiDbCreator, OpenAiDbCreator>();
+            services.TryAddScoped<ISASDbCreator, SASDbCreator>();
 
-            services.TryAddScoped<IHrDbSeeder, HrDbSeeder>();
+            services.TryAddScoped<IMicrosoftDbSeeder, MicrosoftDbSeeder>();
+            services.TryAddScoped<IOpenAIDbSeeder, OpenAIDbSeeder>();
+            services.TryAddScoped<ISolidArcDbSeeder, SolidArcDbSeeder>();
+            services.TryAddScoped<IGoogleDBSeeder, GoogleDBSeeder>();
 
             return services;
         }
