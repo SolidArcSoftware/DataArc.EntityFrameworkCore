@@ -30,11 +30,11 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         private const int MaxRecordCount = 1_000_000;
 
         private IServiceProvider? _serviceProvider;
-        private IReadOnlyCollection<IDatabaseCreator> _databaseCreators = [];
+        private IReadOnlyCollection<IDatabaseCreator> _databaseCreators = new List<IDatabaseCreator>();
         private ICommandFactory? _commandFactory;
 
-        private List<Employee> _allEmployees = [];
-        private List<Employee> _benchmarkEmployees = [];
+        private List<Employee> _allEmployees = new List<Employee>();
+        private List<Employee> _benchmarkEmployees = new List<Employee>();
 
         [Params(62_500, 125_000, 250_000)]
         public int RecordCount { get; set; }
@@ -53,13 +53,13 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
                 .AddPersistence(configurationManager)
                 .BuildServiceProvider();
 
-            _databaseCreators =
-            [
+            _databaseCreators = new IDatabaseCreator[]
+            {
                 _serviceProvider.GetRequiredService<IGoogleDbCreator>(),
                 _serviceProvider.GetRequiredService<IMicrosoftDbCreator>(),
                 _serviceProvider.GetRequiredService<IOpenAiDbCreator>(),
                 _serviceProvider.GetRequiredService<ISASDbCreator>()
-            ];
+            };
 
             _commandFactory = _serviceProvider.GetRequiredService<ICommandFactory>();
 

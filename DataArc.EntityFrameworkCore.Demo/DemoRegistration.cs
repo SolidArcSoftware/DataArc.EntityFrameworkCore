@@ -5,15 +5,16 @@ using DataArc.EntityFrameworkCore.Demo.Application.Modules.Google.Repository;
 using DataArc.EntityFrameworkCore.Demo.Application.Modules.Microsoft.Repository;
 using DataArc.EntityFrameworkCore.Demo.Application.Modules.OpenAi.Repository;
 using DataArc.EntityFrameworkCore.Demo.Application.Modules.SAS.Repository;
-using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Finance.Repository;
-using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.IT.Repository;
-using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Operations.Repository;
+using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Google.Repository;
+using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Microsoft.Repository;
+using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.OpenAi.Repository;
+using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.SolidArc.Repository;
 
-namespace DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules
+namespace DataArc.EntityFrameworkCore.Demo
 {
-    public static class FinanceRegistrationModule
+    public static class DemoRegistration
     {
-        public static IServiceCollection AddModules(this IServiceCollection services, ConfigurationManager configurationManager)
+        public static IServiceCollection AddRepositories(this IServiceCollection services, ConfigurationManager configurationManager)
         {
             // Register repositories
             services.AddScoped<IGoogleRepository, GoogleRepository>();

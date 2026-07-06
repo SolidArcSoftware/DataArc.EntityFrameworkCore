@@ -1,6 +1,6 @@
 ﻿using DataArc.Core;
 using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Dtos;
-using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Finance.Repository;
+using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Google.Repository;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 

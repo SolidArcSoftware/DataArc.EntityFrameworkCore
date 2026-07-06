@@ -1,6 +1,6 @@
 ﻿using DataArc.Core;
 using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Dtos;
-using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Operations.Repository;
+using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Microsoft.Repository;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 

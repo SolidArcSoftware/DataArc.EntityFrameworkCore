@@ -4,8 +4,8 @@ using Microsoft.Extensions.Hosting;
 
 using DataArc.EntityFrameworkCore.Demo.Persistence;
 using DataArc.EntityFrameworkCore.Demo.Host.Workers;
-using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules;
 using DataArc.EntityFrameworkCore.Demo.Host;
+using DataArc.EntityFrameworkCore.Demo;
 
 var host = Host
     .CreateDefaultBuilder(args)
@@ -18,7 +18,7 @@ var host = Host
             .Build();
 
         services
-            .AddModules(configurationManager)
+            .AddRepositories(configurationManager)
             .AddBackgroundServices(configurationManager)
             .AddHostedService<DemoWorkflowWorker>();
     })
