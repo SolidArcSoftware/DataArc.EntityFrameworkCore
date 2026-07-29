@@ -7,3 +7,4 @@ obj/
 **/obj/
 /.vs
 /DataArc.EntityFrameworkCore.Demo.Benchmark/BenchmarkDotNet.Artifacts
+/docs/_site
