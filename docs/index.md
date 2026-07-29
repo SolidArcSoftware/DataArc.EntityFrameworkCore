@@ -4,6 +4,10 @@ DataArc.EntityFrameworkCore provides an explicit execution layer for Entity Fram
 
 It is designed for workflows that need to coordinate queries, commands, bulk operations, transactions, or database tooling across one or more EF Core `DbContext` boundaries.
 
+## DataArc portal
+
+For product information, licensing, pricing, and trial access, visit the [DataArc portal](https://www.dataarc.dev).
+
 EF Core remains responsible for:
 
 - entity mapping
