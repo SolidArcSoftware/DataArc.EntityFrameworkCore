@@ -1,364 +1,384 @@
-# DataArc.EntityFrameworkCore
+# DataArc.EntityFrameworkCore Demo
 
-> **Explicit EF Core execution across multiple `DbContext` and database boundaries.**
+> **High-performance bulk operations for normal Entity Framework Core applications.**
 
 [![Documentation](https://img.shields.io/badge/docs-DataArc.EntityFrameworkCore-2F81F7)](https://solidarcsoftware.github.io/DataArc.EntityFrameworkCore/)
 [![NuGet](https://img.shields.io/badge/NuGet-DataArc.EntityFrameworkCore-004880)](https://www.nuget.org/packages/DataArc.EntityFrameworkCore)
 [![Website](https://img.shields.io/badge/website-dataarc.dev-222222)](https://www.dataarc.dev)
 [![.NET](https://img.shields.io/badge/.NET-6%20%7C%207%20%7C%208%20%7C%209%20%7C%2010-512BD4)](https://dotnet.microsoft.com/)
 
-**EF Core owns data access. DataArc controls execution.**
+**Use Entity Framework Core normally. Add DataArc where bulk execution is useful.**
+
+This repository is a runnable reference application for the free `DataArc.EntityFrameworkCore` bulk APIs.
+
+The demo deliberately keeps ordinary Entity Framework Core at the center of the application:
+
+- standard `DbContext` implementations;
+- standard `IDbContextFactory<TContext>`;
+- standard EF Core LINQ queries;
+- standard EF Core dependency injection;
+- DataArc bulk operations only where high-volume persistence is required.
+
+No DataArc-specific execution context, runtime registration, license key, or activation is required for the bulk APIs demonstrated here.
+
+> The bulk implementation demonstrated by this repository currently targets SQL Server.
 
 ---
 
-## The problem
+## Install
 
-EF Core handles one `DbContext` well.
+```bash
+dotnet add package DataArc.EntityFrameworkCore
+```
 
-The difficulty starts when an application must coordinate work across:
+`DataArc.EntityFrameworkCore` supports **.NET 6 through .NET 10** with the corresponding Entity Framework Core versions.
 
-- multiple `DbContext` implementations;
-- bounded contexts or modular persistence boundaries;
-- separate databases;
-- high-volume imports and synchronisation jobs;
-- ordered, parallel, or transaction-aware workflows;
-- database and script generation;
-- structured execution outcomes.
+The demo projects target **.NET 10**.
 
-Without a consistent execution model, this logic often spreads across repositories, handlers, services, factories, and orchestration code.
+---
+
+## What the demo shows
+
+The demo uses four independent SQL Server databases:
 
 ```text
-Application workflow
-    ├── DbContext A
-    ├── DbContext B
-    ├── DbContext C
-    └── custom coordination everywhere
+GoogleDbContext      → SAS_GoogleDb
+MicrosoftDbContext   → SAS_MicrosoftDb
+OpenAIDbContext      → SAS_OpenAiDb
+SolidArcDbContext    → SAS_Db
 ```
 
-## The DataArc approach
+The Solid Arc database is the source workload.
 
-DataArc.EntityFrameworkCore adds an explicit execution layer above EF Core.
+At startup the demo:
+
+1. deletes and recreates all four demo databases;
+2. creates the schemas and tables using normal Entity Framework Core database creation;
+3. seeds one employer into each database;
+4. seeds **100,000 employees** into the Solid Arc database using `AddBulkAsync`;
+5. reads the source employees using a normal EF Core LINQ query;
+6. applies a salary adjustment in application code;
+7. maps the application entities back to persistence models;
+8. bulk-inserts the adjusted employees into the Google, Microsoft, and OpenAI databases;
+9. reads all four databases independently using normal EF Core;
+10. consolidates the results in application memory.
+
+There are **no cross-database EF Core joins**.
+
+---
+
+## Repository structure
 
 ```text
-Application workflow
-    ↓
-DataArc query and command pipelines
-    ↓
-Explicit execution-context selection
-    ↓
-Registered EF Core DbContext
+DataArc.EntityFrameworkCore
+│
+├── src
+│   ├── App
+│   │   └── DataArc.EntityFrameworkCore.Demo
+│   │       └── Application
+│   │           ├── Dtos
+│   │           ├── Entities
+│   │           ├── Features
+│   │           └── Repositories
+│   │
+│   ├── Host
+│   │   └── DataArc.EntityFrameworkCore.Demo.Host
+│   │       ├── Repositories
+│   │       ├── Services
+│   │       └── Workers
+│   │
+│   └── Infrastructure
+│       └── DataArc.EntityFrameworkCore.Demo.Persistence
+│           ├── Database
+│           │   ├── Creator
+│           │   ├── DBContexts
+│           │   ├── DBModels
+│           │   └── Seeders
+│           └── Utils
+│
+├── docs
+├── .github
+└── DataArc.EntityFrameworkCore.Demos.sln
 ```
 
-Concrete `DbContext` implementations stay inside persistence.
+The application project owns the application-facing entities, DTOs, feature contracts, and repository contracts.
 
-Application code targets public execution-context contracts and chooses exactly where each query or command must run.
+The persistence project owns the EF Core contexts, database models, database creation, and seed data.
 
-```csharp
-var employees = await query
-    .UseDbExecutionContext<IGoogleDbContext>()
-    .ReadWhereAsync<Employee>(
-        employee => employee.Rating > 4.5);
-```
-
-The execution boundary is visible, deliberate, and testable.
+The host composes the application and contains the concrete repository and workflow implementations used by the demo.
 
 ---
 
-## What it gives you
+## Normal EF Core registration
 
-| Capability | What it solves |
-|---|---|
-| **Execution contexts** | Route work to the correct `DbContext` without exposing concrete persistence classes |
-| **Query pipelines** | Run explicit reads through registered database boundaries |
-| **Command pipelines** | Build coordinated write workflows before execution |
-| **Bulk operations** | Process large prepared collections through the same execution model |
-| **Parallel execution** | Run independent context operations concurrently |
-| **Structured results** | Inspect success, exceptions, and affected-record counts consistently |
-| **Database generation** | Create databases and generate reviewable SQL scripts from EF Core models |
-| **Architectural flexibility** | Use DataArc inside services, repositories, modular monoliths, bounded contexts, CQRS, or Clean Architecture |
-
-DataArc does not require a repository per table or a command/query class for every database permutation.
-
-It provides the execution infrastructure. Your application keeps the business intent.
-
----
-
-## Command pipeline
-
-Create one command, target multiple execution contexts, and choose the execution mode.
+Each database context is registered using Microsoft's standard `IDbContextFactory<TContext>` support.
 
 ```csharp
-var commandBuilder = await _commandFactory
-    .CreateCommandBuilderAsync();
-
-commandBuilder
-    .UseDbExecutionContext<IGoogleDbContext>()
-    .AddBulk(employees, batchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IMicrosoftDbContext>()
-    .AddBulk(employees, batchSize);
-
-commandBuilder
-    .UseDbExecutionContext<IOpenAiDbContext>()
-    .AddBulk(employees, batchSize);
-
-var command = await commandBuilder.BuildAsync();
-
-var result = await command.ExecuteParallelAsync();
-
-if (!result.Success)
-{
-    throw new InvalidOperationException(
-        "Employee distribution failed.",
-        result.Exception);
-}
-
-return result.TotalAffected;
+services.AddDbContextFactory<GoogleDbContext>(options =>
+    options.UseSqlServer(
+        configurationManager.GetConnectionString("GoogleDb")));
 ```
 
-```text
-One application command
-    ├── GoogleDbContext
-    ├── MicrosoftDbContext
-    └── OpenAiDbContext
-            ↓
-    structured execution result
-```
-
----
-
-## Public contracts, internal DbContexts
-
-Application code depends on an execution boundary:
+Contexts are created normally:
 
 ```csharp
-public interface IGoogleDbContext : IExecutionContext
-{
-    DbSet<Employer>? Employer { get; set; }
-
-    DbSet<Employee>? Employee { get; set; }
-}
+await using var dbContext =
+    await _googleDbContextFactory.CreateDbContextAsync();
 ```
 
-The concrete EF Core implementation remains internal:
+Queries remain ordinary EF Core:
 
 ```csharp
-internal sealed class GoogleDbContext :
-    DbContext,
-    IGoogleDbContext
-{
-    public GoogleDbContext(
-        DbContextOptions<GoogleDbContext> options)
-        : base(options)
+var employees = await dbContext.Employee!
+    .AsNoTracking()
+    .Where(employee => employee.Rating > rating)
+    .Select(employee => new EmployeeEntity
     {
-    }
-
-    public DbSet<Employer>? Employer { get; set; }
-
-    public DbSet<Employee>? Employee { get; set; }
-}
+        Id = employee.Id,
+        Name = employee.Name,
+        Surname = employee.Surname,
+        Salary = employee.Salary,
+        EmployerId = employee.EmployerId,
+        Order = employee.Order,
+        IsArchived = employee.IsArchived,
+        CreatedUtc = employee.CreatedUtc,
+        LastUpdatedUtc = employee.LastUpdatedUtc,
+        Notes = employee.Notes,
+        Status = employee.Status,
+        Rating = employee.Rating
+    })
+    .ToListAsync();
 ```
 
-Registration maps the public contract to the implementation:
-
-```csharp
-services.AddDataArcCore();
-
-services.ConfigureDataArc(dataArc =>
-{
-    dataArc.UseEntityFrameworkCore(ef =>
-    {
-        ef.AddDbExecutionContext<
-            IGoogleDbContext,
-            GoogleDbContext>(
-                options =>
-                    options.UseSqlServer(
-                        googleConnectionString));
-    });
-});
-```
+DataArc does not replace the normal EF Core query path.
 
 ---
 
-## Database and script generation
+## Bulk insert
 
-Generate a database from the current EF Core model and retain reviewable SQL scripts.
-
-```csharp
-var database = _databaseFactory
-    .CreateDatabaseBuilder()
-    .IncludeDbContext<GoogleDbContext>()
-    .Build(
-        generateScripts: true,
-        applyChanges: true);
-
-database.ExecuteCreate();
-```
-
-The same builder model supports database deletion:
+Once a collection of persistence entities has been prepared, call `AddBulkAsync` directly on the existing `DbContext`.
 
 ```csharp
-database.ExecuteDrop();
+await using var dbContext =
+    await _googleDbContextFactory.CreateDbContextAsync();
+
+await dbContext.AddBulkAsync(
+    employees,
+    batchSize);
 ```
 
-This is useful for:
-
-- repeatable development environments;
-- integration tests;
-- demos;
-- empty-database onboarding;
-- reviewed baseline SQL generation.
-
-For existing production databases, use an appropriate incremental schema-migration strategy.
-
----
-
-## Demonstration repository
-
-This repository demonstrates DataArc.EntityFrameworkCore across four isolated SQL Server database boundaries:
+The execution path stays small:
 
 ```text
-SAS_GoogleDb
-SAS_MicrosoftDb
-SAS_OpenAiDb
-SAS_Db
+IDbContextFactory<TContext>
+        ↓
+DbContext
+        ↓
+AddBulkAsync(...)
+        ↓
+SQL Server
 ```
 
-The demo:
-
-1. creates and seeds the databases;
-2. reads employees through an explicit source context;
-3. applies salary-adjustment rules;
-4. bulk-writes prepared data to independent targets;
-5. executes target operations in parallel;
-6. queries each database independently;
-7. consolidates the read model in application code;
-8. returns structured execution results.
-
-No cross-database EF Core join is used.
-
-Each database remains its own persistence boundary.
+No command builder or separate DataArc execution runtime is required.
 
 ---
 
-## Benchmark snapshot
+## Keeping persistence models at the persistence boundary
 
-The included BenchmarkDotNet project exercises parallel bulk insertion across four EF Core contexts.
+The demo does not expose EF Core database models through its application repository contracts.
 
-| Total inserted records | Mean |
-|---:|---:|
-| 250,000 | 560.5 ms |
-| 500,000 | 1,077.9 ms |
-| 1,000,000 | 1,964.6 ms |
-
-These results are workload-specific, not a universal performance guarantee.
-
-Hardware, SQL Server configuration, schema design, indexes, batch size, runtime version, and database state all affect performance.
-
-The important execution shape is:
+Repository implementations project persistence models into application-owned entities:
 
 ```text
-one explicit command pipeline
-    + four EF Core contexts
-    + parallel execution
-    + structured result handling
+SQL Server
+    ↓
+DbContext
+    ↓
+Persistence model
+    ↓ repository projection
+EmployeeEntity
+    ↓
+Application
 ```
+
+For writes, the repository maps in the opposite direction:
+
+```text
+Application
+    ↓
+EmployeeEntity
+    ↓ repository mapping
+Persistence model
+    ↓
+DbContext
+    ↓
+AddBulkAsync(...)
+    ↓
+SQL Server
+```
+
+This keeps the application contracts independent of the EF Core persistence model while still using ordinary EF Core and DataArc directly inside the concrete repository implementations.
+
+---
+
+## Demo workflow
+
+The salary-adjustment workflow begins with the Solid Arc database:
+
+```text
+SolidArcDbContext
+        ↓
+normal EF Core query
+        ↓
+EmployeeEntity
+        ↓
+salary adjustment
+        ↓
+destination repositories
+        ├── GoogleDbContext
+        ├── MicrosoftDbContext
+        └── OpenAIDbContext
+                ↓
+          AddBulkAsync(...)
+```
+
+The consolidated read path is also ordinary EF Core:
+
+```text
+GoogleDbContext ──────┐
+MicrosoftDbContext ───┤
+OpenAIDbContext ──────┼──> repository projection ──> application consolidation
+SolidArcDbContext ────┘
+```
+
+Each database is queried independently and the results are combined in application memory.
+
+---
+
+## Example full-volume run
+
+With the demo configured to process all 100,000 source employees, one development run produced:
+
+```text
+Top Rated Employee: Name62433 Surname62433, Salary: 157,499.16,
+Number of top rated employees: 400,000
+
+Processed 300,000 salary adjustment records in 3084ms
+Demo workflow completed in 4415 ms.
+```
+
+The result reflects:
+
+```text
+100,000 source employees
+        ↓
+100,000 bulk inserts → Google
+100,000 bulk inserts → Microsoft
+100,000 bulk inserts → OpenAI
+        ↓
+300,000 destination records processed
+        ↓
+100,000 records × 4 databases
+        ↓
+400,000 consolidated records
+```
+
+This is an **example development run, not a formal benchmark**.
+
+Execution time varies with hardware, SQL Server configuration, database state, runtime version, entity shape, batch size, and other environmental factors.
+
+For published performance measurements and methodology, see the [DataArc.EntityFrameworkCore documentation](https://solidarcsoftware.github.io/DataArc.EntityFrameworkCore/performance.html).
 
 ---
 
 ## Run the demo
 
-### 1. Configure SQL Server
+### Requirements
 
-Update the connection strings in the host `appsettings.json`:
+You need:
+
+- .NET 10 SDK;
+- SQL Server accessible from the machine running the demo.
+
+### Configure SQL Server
+
+Update the connection strings in:
+
+```text
+src/Host/DataArc.EntityFrameworkCore.Demo.Host/appsettings.json
+```
+
+Example:
 
 ```json
 {
   "ConnectionStrings": {
+    "SASDb": "Server=YOUR_SERVER;Database=SAS_Db;Integrated Security=true;TrustServerCertificate=True;",
     "GoogleDb": "Server=YOUR_SERVER;Database=SAS_GoogleDb;Integrated Security=true;TrustServerCertificate=True;",
     "MicrosoftDb": "Server=YOUR_SERVER;Database=SAS_MicrosoftDb;Integrated Security=true;TrustServerCertificate=True;",
-    "OpenAiDb": "Server=YOUR_SERVER;Database=SAS_OpenAiDb;Integrated Security=true;TrustServerCertificate=True;",
-    "SolidArcDb": "Server=YOUR_SERVER;Database=SAS_Db;Integrated Security=true;TrustServerCertificate=True;"
+    "OpenAiDb": "Server=YOUR_SERVER;Database=SAS_OpenAiDb;Integrated Security=true;TrustServerCertificate=True;"
   }
 }
 ```
 
-### 2. Run
+### Important
+
+> **The demo deletes and recreates all four configured databases every time it starts. Use disposable development databases only.**
+
+### Run
+
+From the repository root:
 
 ```bash
-dotnet run --framework net8.0
+dotnet run --project src/Host/DataArc.EntityFrameworkCore.Demo.Host/DataArc.EntityFrameworkCore.Demo.Host.csproj
 ```
-
-The demo multi-targets .NET 6, 7, 8, 9, and 10.
-
-> The demo recreates its configured databases. Use disposable development databases only.
 
 ---
 
 ## Documentation
 
-The full documentation covers:
-
-- getting started;
-- compatibility;
-- execution contexts;
-- query pipelines;
-- command pipelines;
-- bulk and parallel operations;
-- transactional workflows;
-- structured execution results;
-- database and script generation;
-- trial and licensing.
+Full documentation is available at:
 
 ### [Read the DataArc.EntityFrameworkCore documentation →](https://solidarcsoftware.github.io/DataArc.EntityFrameworkCore/)
 
----
+The documentation covers:
 
-## Where DataArc fits
-
-DataArc.EntityFrameworkCore is intended for applications where EF Core execution must be coordinated across controlled persistence boundaries.
-
-It fits naturally inside:
-
-- modular monoliths;
-- bounded-context systems;
-- Clean Architecture;
-- CQRS-style applications;
-- background workers;
-- batch-processing systems;
-- data synchronisation workflows;
-- architecture-remediation projects.
-
-It is not intended to bypass service ownership or encourage unrelated services to access each other's private databases.
-
-The goal is explicit coordination—not hidden coupling.
+- getting started;
+- bulk inserts and deletes;
+- transaction participation;
+- standard `DbContext` and `IDbContextFactory<TContext>` integration;
+- memory-efficient bulk execution;
+- licensing;
+- the relationship to the commercial DataArc Orchestration Framework.
 
 ---
 
-## Evaluate DataArc
+## Microsoft Learn
 
-Use the trial against a real workload and measure whether DataArc reduces:
+DataArc.EntityFrameworkCore is listed in the Microsoft Learn Entity Framework Core extensions documentation.
 
-- custom EF Core coordination code;
-- repository and handler sprawl;
-- duplicated execution logic;
-- ambiguity around context selection;
-- bulk-processing complexity;
-- result-handling inconsistency.
+This repository provides the runnable reference application for developers evaluating the package.
 
-### [Start a trial or purchase a license →](https://www.dataarc.dev)
+---
+
+## Licensing
+
+`DataArc.EntityFrameworkCore` is available free of charge for permitted use under its package license.
+
+The free package does not require a DataArc license key, runtime activation, per-developer fees, runtime fees, or a time-limited trial.
+
+See the NuGet package license for the complete terms.
 
 ---
 
 ## The core idea
 
 ```text
-EF Core
-    owns database access
+Entity Framework Core
+    owns normal application data access
 
 DataArc.EntityFrameworkCore
-    owns explicit execution
+    adds high-performance bulk persistence where required
 ```
 
-**Keep your contexts separate. Make execution visible. Coordinate the workflow.**
+**Keep normal EF Core. Use DataArc where it earns its place.**

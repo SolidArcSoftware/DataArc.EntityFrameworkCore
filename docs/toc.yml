@@ -1,38 +1,16 @@
 - name: Overview
   href: index.md
-
 - name: Getting Started
   href: getting-started.md
-
-- name: Compatibility
-  href: compatibility.md
-
-- name: Core Concepts
-  items:
-    - name: Execution Contexts
-      href: execution-contexts.md
-
-    - name: Query Pipelines
-      href: query-pipelines.md
-
-    - name: Command Pipelines
-      href: command-pipelines.md
-
-    - name: Bulk and Parallel Operations
-      href: bulk-and-parallel-operations.md
-
-    - name: Transactional Workflows
-      href: transactions.md
-
-    - name: Structured Execution Results
-      href: structured-results.md
-
-- name: Database Tooling
-  items:
-    - name: Database and Script Generation
-      href: database-generation.md
-
+- name: Bulk Operations
+  href: bulk-operations.md
+- name: Transactions
+  href: transactions.md
+- name: DbContext Integration
+  href: dbcontext-integration.md
+- name: Performance
+  href: performance.md
 - name: Licensing
-  items:
-    - name: Trial and Licensing
-      href: licensing-and-trial.md
+  href: licensing.md
+- name: When Persistence Requirements Grow
+  href: orchestration-framework.md

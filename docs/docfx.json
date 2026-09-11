@@ -1,33 +1,18 @@
 {
-  "$schema": "https://raw.githubusercontent.com/dotnet/docfx/main/schemas/docfx.schema.json",
   "build": {
     "content": [
       {
         "files": [
-          "**/*.{md,yml}"
-        ],
-        "exclude": [
-          "_site/**"
-        ]
-      }
-    ],
-    "resource": [
-      {
-        "files": [
-          "images/**"
+          "**/*.md",
+          "**/toc.yml"
         ]
       }
     ],
     "output": "_site",
-    "template": [
-      "default",
-      "modern"
-    ],
     "globalMetadata": {
       "_appName": "DataArc.EntityFrameworkCore",
       "_appTitle": "DataArc.EntityFrameworkCore",
-      "_enableSearch": true,
-      "pdf": false
+      "_enableSearch": true
     }
   }
 }
