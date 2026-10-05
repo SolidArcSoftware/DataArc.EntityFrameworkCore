@@ -1,18 +1,21 @@
-﻿using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Features.SalaryAdjustments.Services;
+﻿using Microsoft.EntityFrameworkCore;
+
+using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Features.SalaryAdjustments.Services;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
 
-using Microsoft.EntityFrameworkCore;
+using DataArc.EntityFrameworkCore.Parallel.Transactional;
 
-namespace DataArc.EntityFrameworkCore.Demo.Host.BackgroundServices
+namespace DataArc.EntityFrameworkCore.Demo.Host.WorkerServices
 {
-    internal class SalaryAdjustmentService : ISalaryAdjustmentService
+    internal sealed class TransactionalSalaryAdjustmentService
+       : ITransactionalSalaryAdjustmentService
     {
         private readonly IDbContextFactory<SolidArcDbContext> _solidArcDbContextFactory;
         private readonly IDbContextFactory<GoogleDbContext> _googleDbContextFactory;
         private readonly IDbContextFactory<MicrosoftDbContext> _microsoftDbContextFactory;
         private readonly IDbContextFactory<OpenAIDbContext> _openAiDbContextFactory;
 
-        public SalaryAdjustmentService(
+        public TransactionalSalaryAdjustmentService(
             IDbContextFactory<SolidArcDbContext> solidArcDbContextFactory,
             IDbContextFactory<GoogleDbContext> googleDbContextFactory,
             IDbContextFactory<MicrosoftDbContext> microsoftDbContextFactory,
@@ -24,7 +27,10 @@ namespace DataArc.EntityFrameworkCore.Demo.Host.BackgroundServices
             _openAiDbContextFactory = openAiDbContextFactory;
         }
 
-        public async Task<int> ProcessEmployeeSalaryAdjustmentsAsync(decimal salaryAdjustmentBaseRate, decimal salaryThreshold, int batchSize)
+        public async Task<int> ProcessEmployeeSalaryAdjustmentsAsync(
+            decimal salaryAdjustmentBaseRate,
+            decimal salaryThreshold,
+            int batchSize)
         {
             await using var solidArcDbContext =
                 await _solidArcDbContextFactory.CreateDbContextAsync();
@@ -55,22 +61,22 @@ namespace DataArc.EntityFrameworkCore.Demo.Host.BackgroundServices
 
             var results = await Task.WhenAll(
                 googleDbContext
-                    .AsParallel()
+                    .AsParallelTransaction()
                     .AddBulk(employers, batchSize)
                     .AddBulk(employees, batchSize)
-                    .SaveChangesParallelAsync(),
+                    .CommitTransactionParallelAsync(),
 
                 microsoftDbContext
-                    .AsParallel()
+                    .AsParallelTransaction()
                     .AddBulk(employers, batchSize)
                     .AddBulk(employees, batchSize)
-                    .SaveChangesParallelAsync(),
+                    .CommitTransactionParallelAsync(),
 
                 openAiDbContext
-                    .AsParallel()
+                    .AsParallelTransaction()
                     .AddBulk(employers, batchSize)
                     .AddBulk(employees, batchSize)
-                    .SaveChangesParallelAsync());
+                    .CommitTransactionParallelAsync());
 
             return results.Sum();
         }

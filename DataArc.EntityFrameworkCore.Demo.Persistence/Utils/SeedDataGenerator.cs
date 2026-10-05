@@ -2,6 +2,12 @@
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Utils
 {
+    public sealed class HrSeedData
+    {
+        public List<Employer> Employers { get; init; } = [];
+        public List<Employee> Employees { get; init; } = [];
+    }
+
     public static class SeedDataGenerator
     {
         private static string GetRandomStatus(Random rand)
@@ -10,33 +16,51 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Utils
             return statuses[rand.Next(statuses.Length)];
         }
 
-        public static List<Employee> GenerateHrSeedData(int count = 50)
+        public static HrSeedData GenerateHrSeedData(int count = 50)
         {
-            var list = new List<Employee>();
+            var employers = new List<Employer>(count);
+            var employees = new List<Employee>(count);
+
             var rand = new Random();
+            var utcNow = DateTime.UtcNow;
 
-            for (int i = 1; i <= count; i++)
+            for (var i = 1; i <= count; i++)
             {
-                var entity = new Employee
-                {
-                    Id = i,
-                    Name = $"Name{i}",
-                    Surname = $"Surname{i}",
-                    Salary = Math.Round((decimal)(rand.NextDouble() * (150000 - 30000) + 30000), 2),
-                    EmployerId = 1,
-                    Order = rand.Next(1, 101),
-                    IsArchived = rand.Next(0, 2) == 0,
-                    CreatedUtc = DateTime.UtcNow.AddDays(-rand.Next(0, 1000)),
-                    LastUpdatedUtc = DateTime.UtcNow,
-                    Notes = $"This is a sample note for record {i}.",
-                    Status = GetRandomStatus(rand),
-                    Rating = Math.Round(rand.NextDouble() * 4 + 1, 2)
-                };
+                employers.Add(
+                    new Employer
+                    {
+                        Id = i,
+                        Name = $"Employer{i}",
+                        Description = $"Employer {i}"
+                    });
 
-                list.Add(entity);
+                employees.Add(
+                    new Employee
+                    {
+                        Id = i,
+                        Name = $"Name{i}",
+                        Surname = $"Surname{i}",
+                        Salary = Math.Round(
+                            (decimal)(rand.NextDouble() * (150000 - 30000) + 30000),
+                            2),
+                        EmployerId = i,
+                        Order = rand.Next(1, 101),
+                        IsArchived = rand.Next(0, 2) == 0,
+                        CreatedUtc = utcNow.AddDays(-rand.Next(0, 1000)),
+                        LastUpdatedUtc = utcNow,
+                        Notes = $"This is a sample note for record {i}.",
+                        Status = GetRandomStatus(rand),
+                        Rating = Math.Round(
+                            rand.NextDouble() * 4 + 1,
+                            2)
+                    });
             }
 
-            return list;
+            return new HrSeedData
+            {
+                Employers = employers,
+                Employees = employees
+            };
         }
     }
 }

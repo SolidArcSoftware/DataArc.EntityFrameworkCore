@@ -1,73 +1,55 @@
-﻿using DataArc.Core;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
+﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
+
+using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeders
 {
     public interface IOpenAIDbSeeder : IDatabaseSeeder
     {
-
     }
 
     internal class OpenAIDbSeeder : IOpenAIDbSeeder
     {
-        private readonly ICommandFactory _commandFactory;
+        private readonly IDbContextFactory<OpenAIDbContext> _dbContextFactory;
 
-        public OpenAIDbSeeder(ICommandFactory commandFactory)
+        public OpenAIDbSeeder(
+            IDbContextFactory<OpenAIDbContext> dbContextFactory)
         {
-            _commandFactory = commandFactory;
+            _dbContextFactory = dbContextFactory;
         }
 
         public bool SeedDatabase()
         {
-            try
-            {
-                var seedingCommand = _commandFactory.CreateCommand();
+            using var dbContext = _dbContextFactory.CreateDbContext();
 
-                var commandResult = seedingCommand
-                    .UseDbExecutionContext<OpenAIDbContext>()
-                    .Add(new Employer()
-                    {
-                        Name = "Microsoft",
-                        Description = "Microsoft Company"
-                    }).Execute();
+            dbContext.Employer!.Add(
+                new Employer
+                {
+                    Name = "Microsoft",
+                    Description = "Microsoft Company"
+                });
 
+            dbContext.SaveChanges();
 
-                if (!commandResult.Success)
-                    throw new Exception($"Exception occured in {nameof(OpenAIDbSeeder)}, {commandResult.Message}");
-
-                return true;
-            }
-            catch
-            {
-                throw;
-            }
+            return true;
         }
 
         public async Task<bool> SeedDatabaseAsync()
         {
-            try
-            {
-                var seedingCommand = await _commandFactory.CreateCommandAsync();
+            await using var dbContext =
+                await _dbContextFactory.CreateDbContextAsync();
 
-                var commandResult = await seedingCommand
-                    .UseDbExecutionContext<OpenAIDbContext>()
-                    .Add(new Employer()
-                    {
-                        Name = "Microsoft",
-                        Description = "Microsoft Company"
-                    })
-                    .ExecuteAsync();
+            await dbContext.Employer!.AddAsync(
+                new Employer
+                {
+                    Name = "Microsoft",
+                    Description = "Microsoft Company"
+                });
 
-                if (!commandResult.Success)
-                    throw new Exception($"Exception occured in {nameof(OpenAIDbSeeder)}, {commandResult.Message}");
+            await dbContext.SaveChangesAsync();
 
-                return true;
-            }
-            catch
-            {
-                throw;
-            }
+            return true;
         }
     }
 }

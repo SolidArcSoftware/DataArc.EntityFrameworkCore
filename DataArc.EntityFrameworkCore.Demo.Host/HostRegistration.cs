@@ -5,6 +5,7 @@ using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Features.Em
 using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Features.SalaryAdjustments.Services;
 using DataArc.EntityFrameworkCore.Demo.Host.BackgroundServices;
 using DataArc.EntityFrameworkCore.Demo.Persistence;
+using DataArc.EntityFrameworkCore.Demo.Host.WorkerServices;
 
 namespace DataArc.EntityFrameworkCore.Demo.Host
 {
@@ -18,6 +19,8 @@ namespace DataArc.EntityFrameworkCore.Demo.Host
             // Register Background worker services
             services.AddScoped<ISalaryAdjustmentService, SalaryAdjustmentService>();
             services.AddScoped<IEmployeePerformanceService, EmployeePerformanceService>();
+
+            services.AddScoped<ITransactionalSalaryAdjustmentService, TransactionalSalaryAdjustmentService>();
             return services;
         }
     }

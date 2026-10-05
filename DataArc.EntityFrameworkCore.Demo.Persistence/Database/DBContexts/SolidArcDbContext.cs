@@ -1,10 +1,9 @@
-﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
+﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts
 {
-    internal class SolidArcDbContext : DbContext, ISolidArcDbContext
+    public class SolidArcDbContext : DbContext
     {
         public SolidArcDbContext(DbContextOptions<SolidArcDbContext> dbContextOptions) 
             : base(dbContextOptions) { }

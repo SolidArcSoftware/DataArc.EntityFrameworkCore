@@ -1,10 +1,9 @@
-﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
+﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts
 {
-    internal class OpenAIDbContext : DbContext, IOpenAIDbContext
+    public class OpenAIDbContext : DbContext
     {
         public OpenAIDbContext(DbContextOptions<OpenAIDbContext> dbContextOptions) 
             : base(dbContextOptions) { }

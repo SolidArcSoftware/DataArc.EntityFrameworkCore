@@ -1,6 +1,9 @@
 - name: Overview
   href: index.md
 
+- name: Introduction
+  href: introduction.md
+
 - name: Getting Started
   href: getting-started.md
 
@@ -9,30 +12,30 @@
 
 - name: Core Concepts
   items:
-    - name: Execution Contexts
+    - name: DbContext Boundaries
       href: execution-contexts.md
 
-    - name: Query Pipelines
+    - name: Queries with EF Core
       href: query-pipelines.md
 
-    - name: Command Pipelines
+    - name: Persistence Execution
       href: command-pipelines.md
 
     - name: Bulk and Parallel Operations
       href: bulk-and-parallel-operations.md
 
-    - name: Transactional Workflows
+    - name: Transactions
       href: transactions.md
 
-    - name: Structured Execution Results
+    - name: Execution Results
       href: structured-results.md
 
 - name: Database Tooling
   items:
-    - name: Database and Script Generation
+    - name: Multi-Context DDL Builder
       href: database-generation.md
 
 - name: Licensing
   items:
-    - name: Trial and Licensing
+    - name: Package and Licensing
       href: licensing-and-trial.md
