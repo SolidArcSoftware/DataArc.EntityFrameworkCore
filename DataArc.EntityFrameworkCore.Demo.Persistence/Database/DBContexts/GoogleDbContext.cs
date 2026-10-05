@@ -1,10 +1,9 @@
-﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
+﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts
 {
-    internal class GoogleDbContext : DbContext, IGoogleDbContext
+    public class GoogleDbContext : DbContext
     {
         public GoogleDbContext(DbContextOptions<GoogleDbContext> dbContextOptions) 
             : base(dbContextOptions) { }

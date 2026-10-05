@@ -1,113 +1,117 @@
 # DataArc.EntityFrameworkCore
 
-DataArc.EntityFrameworkCore provides an explicit execution layer for Entity Framework Core applications.
+> **High-performance EF Core execution without replacing EF Core.**
 
-It is designed for workflows that need to coordinate queries, commands, bulk operations, transactions, or database tooling across one or more EF Core `DbContext` boundaries.
+[![NuGet](https://img.shields.io/badge/NuGet-DataArc.EntityFrameworkCore-004880)](https://www.nuget.org/packages/DataArc.EntityFrameworkCore)
+[![Website](https://img.shields.io/badge/website-dataarc.dev-222222)](https://www.dataarc.dev)
+[![.NET](https://img.shields.io/badge/.NET-6%20%7C%207%20%7C%208%20%7C%209%20%7C%2010-512BD4)](https://dotnet.microsoft.com/)
 
-## DataArc portal
+`DataArc.EntityFrameworkCore` extends ordinary Entity Framework Core with bulk and parallel persistence execution.
 
-For product information, licensing, pricing, and trial access, visit the [DataArc portal](https://www.dataarc.dev).
+It does not replace `DbContext`, `IDbContextFactory<TContext>`, LINQ, EF Core change tracking, or normal application architecture.
 
-EF Core remains responsible for:
+```text
+EF Core
+    owns DbContext and data access
 
-- entity mapping
-- change tracking
-- LINQ translation
-- database-provider integration
-- database communication
+DataArc.EntityFrameworkCore
+    adds bulk and parallel execution
 
-DataArc controls how application workflows execute that work.
+.NET
+    coordinates independent DbContexts
+```
 
-## What DataArc provides
+## Package model
 
-DataArc.EntityFrameworkCore supports:
+DataArc 2.0 separates the free EF Core execution package from the commercial SQL Server package.
 
-- explicit database execution boundaries
-- command and query factories
-- command and query pipelines
-- contract-based or direct `DbContext` execution
-- bulk operations
-- parallel execution across multiple contexts
-- transactional command workflows
-- structured execution results
-- database creation and deletion
-- SQL script generation
-- multi-`DbContext` and multi-database workflows
+### DataArc.EntityFrameworkCore
+
+The free package contains the general EF Core execution capabilities:
+
+- direct bulk insertion;
+- caller-owned transactional bulk execution;
+- fluent `AsParallel()` persistence execution;
+- `Add`, `AddRange`, `Update`, `Remove`, and `AddBulk`;
+- `SaveChangesParallelAsync()`.
+
+No DataArc runtime license is required for this package.
+
+```xml
+<PackageReference Include="DataArc.EntityFrameworkCore" Version="2.0.0" />
+```
+
+### DataArc.EntityFrameworkCore.SqlServer
+
+The SQL Server package adds commercial SQL Server-specific capabilities, including:
+
+- DataArc-owned transaction execution;
+- `AsParallelTransaction()`;
+- `CommitTransactionParallelAsync()`;
+- multi-`DbContext` coordination;
+- relational database-definition tooling;
+- multi-context DDL generation.
+
+```xml
+<PackageReference Include="DataArc.EntityFrameworkCore.SqlServer" Version="2.0.0" />
+```
+
+The SQL Server package carries `DataArc.EntityFrameworkCore` as a dependency.
 
 ## Core execution model
 
-```text
-Application workflow
-    ↓
-Command or query factory
-    ↓
-Explicit execution-context selection
-    ↓
-EF Core DbContext
-    ↓
-Database
-```
-
-A workflow can select a contract-based execution boundary explicitly:
+Normal reads remain normal EF Core:
 
 ```csharp
-var query = await _queryFactory.CreateQueryAsync();
+await using var dbContext =
+    await dbContextFactory.CreateDbContextAsync();
 
-var employees = await query
-    .UseDbExecutionContext<IGoogleDbContext>()
-    .ReadWhereAsync<Employee>(
-        employee => employee.Rating > 4.5);
+var employees = await dbContext.Employee!
+    .AsNoTracking()
+    .Where(employee => employee.Rating > 4.5)
+    .ToListAsync();
 ```
 
-DataArc can also target a concrete `DbContext` directly:
+Use DataArc where execution benefits from bulk or parallel work:
 
 ```csharp
-var employees = await query
-    .UseDbExecutionContext<GoogleDbContext>()
-    .ReadWhereAsync<Employee>(
-        employee => employee.Rating > 4.5);
+await dbContext
+    .AsParallel()
+    .AddBulk(employers, batchSize)
+    .AddBulk(employees, batchSize)
+    .SaveChangesParallelAsync();
 ```
 
-Execution-context contracts are optional architectural boundaries. They are not required when targeting the concrete `DbContext` directly is appropriate.
+For commercial SQL Server transaction execution:
 
-## Example scenarios
+```csharp
+await dbContext
+    .AsParallelTransaction()
+    .AddBulk(employers, batchSize)
+    .AddBulk(employees, batchSize)
+    .CommitTransactionParallelAsync();
+```
 
-DataArc.EntityFrameworkCore can support:
+## Demonstration repositories
 
-- background workers
-- scheduled jobs
-- high-volume data imports
-- batch processing
-- salary or pricing adjustments
-- multi-database workflows
-- company or tenant database onboarding
-- bulk data distribution
-- controlled transactional execution
-- database creation and reset tooling
+The `DataArc.EntityFrameworkCore` demo uses four independent SQL Server databases and demonstrates normal EF Core reads with DataArc bulk and parallel writes.
+
+The DataArc Orchestration Framework demo demonstrates the multi-context DDL Builder with HR, Finance, IT, and Operations `DbContext` models composed into one physical relational database.
 
 ## Documentation
 
-Continue with:
-
 - [Getting Started](getting-started.md)
 - [Compatibility](compatibility.md)
-- [Execution Contexts](execution-contexts.md)
-- [Query Pipelines](query-pipelines.md)
-- [Command Pipelines](command-pipelines.md)
+- [DbContext Boundaries](execution-contexts.md)
+- [Queries with EF Core](query-pipelines.md)
+- [Persistence Execution](command-pipelines.md)
 - [Bulk and Parallel Operations](bulk-and-parallel-operations.md)
-- [Transactional Workflows](transactions.md)
-- [Structured Execution Results](structured-results.md)
-- [Database and Script Generation](database-generation.md)
-- [Trial and Licensing](licensing-and-trial.md)
+- [Transactions](transactions.md)
+- [Execution Results](structured-results.md)
+- [Multi-Context DDL Builder](database-generation.md)
+- [Licensing](licensing-and-trial.md)
 
 ## Public resources
 
-- [GitHub repository](https://github.com/pierriemostert/DataArc.EntityFrameworkCore)
-- [NuGet package](https://www.nuget.org/packages/DataArc.EntityFrameworkCore)
 - [DataArc website](https://www.dataarc.dev)
-
----
-
-**EF Core owns data access.**
-
-**DataArc controls execution.**
+- [DataArc.EntityFrameworkCore on NuGet](https://www.nuget.org/packages/DataArc.EntityFrameworkCore)

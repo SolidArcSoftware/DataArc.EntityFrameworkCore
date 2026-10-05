@@ -1,4 +1,4 @@
-﻿using DataArc.Core;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
 
@@ -6,60 +6,67 @@ namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator
 {
     public interface IMicrosoftDbCreator : IDatabaseCreator
     {
-
     }
 
     internal class MicrosoftDbCreator : IMicrosoftDbCreator
     {
-        private readonly IDatabaseFactory _databaseFactory;
+        private readonly IDbContextFactory<MicrosoftDbContext> _dbContextFactory;
 
-        public MicrosoftDbCreator(IDatabaseFactory databaseFactory)
+        public MicrosoftDbCreator(
+            IDbContextFactory<MicrosoftDbContext> dbContextFactory)
         {
-            _databaseFactory = databaseFactory;
+            _dbContextFactory = dbContextFactory;
         }
 
         public bool CanConnect()
         {
-            throw new NotImplementedException();
+            using var dbContext =
+                _dbContextFactory.CreateDbContext();
+
+            return dbContext.Database.CanConnect();
         }
 
-        public Task<bool> CanConnectAsync(CancellationToken cancellationToken = default)
+        public async Task<bool> CanConnectAsync(
+            CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            await using var dbContext =
+                await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+            return await dbContext.Database.CanConnectAsync(cancellationToken);
         }
 
         public bool EnsureCreated()
         {
-            var dbBuilder = _databaseFactory.CreateDatabaseBuilder();
+            using var dbContext =
+                _dbContextFactory.CreateDbContext();
 
-            var db = dbBuilder
-                .IncludeDbContext<MicrosoftDbContext>()
-                .Build(generateScripts: true, applyChanges: true);
-
-            db.ExecuteCreate();
-            return true;
+            return dbContext.Database.EnsureCreated();
         }
 
-        public Task<bool> EnsureCreatedAsync(CancellationToken cancellationToken = default)
+        public async Task<bool> EnsureCreatedAsync(
+            CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            await using var dbContext =
+                await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+            return await dbContext.Database.EnsureCreatedAsync(cancellationToken);
         }
 
         public bool EnsureDeleted()
         {
-            var dbBuilder = _databaseFactory.CreateDatabaseBuilder();
+            using var dbContext =
+                _dbContextFactory.CreateDbContext();
 
-            var db = dbBuilder
-                .IncludeDbContext<MicrosoftDbContext>()
-                .Build(generateScripts: true, applyChanges: true);
-
-            db.ExecuteDrop();
-            return true;
+            return dbContext.Database.EnsureDeleted();
         }
 
-        public Task<bool> EnsureDeletedAsync(CancellationToken cancellationToken = default)
+        public async Task<bool> EnsureDeletedAsync(
+            CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            await using var dbContext =
+                await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+            return await dbContext.Database.EnsureDeletedAsync(cancellationToken);
         }
     }
 }

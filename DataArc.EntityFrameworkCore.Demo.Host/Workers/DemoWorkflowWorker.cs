@@ -2,6 +2,7 @@
 
 using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Features.EmployeePerformance.Services;
 using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Features.SalaryAdjustments.Services;
+using System.Diagnostics;
 
 namespace DataArc.EntityFrameworkCore.Demo.Host.Workers
 {
@@ -31,13 +32,13 @@ namespace DataArc.EntityFrameworkCore.Demo.Host.Workers
                 decimal salaryThreshold = 10_000m;
                 double ratingThreshold = 4.5;
 
+                var stopwatch = Stopwatch.StartNew();
+
                 var processedCount = await _salaryAdjustmentService
                     .ProcessEmployeeSalaryAdjustmentsAsync(
                         salaryAdjustmentBaseRate,
                         salaryThreshold,
                         BatchSize);
-
-                Console.WriteLine($"Processed salary adjustment records: {processedCount:N0}");
 
                 if (processedCount > 0)
                 {
@@ -58,6 +59,7 @@ namespace DataArc.EntityFrameworkCore.Demo.Host.Workers
                 }
 
                 Console.WriteLine();
+                Console.WriteLine($"Processed salary adjustment records: {processedCount:N0} in {stopwatch.ElapsedMilliseconds}ms");
                 Console.WriteLine("Demo workflow completed.");
             }
             catch (Exception exception)

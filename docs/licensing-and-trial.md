@@ -1,141 +1,138 @@
-# Trial and Licensing
+# Licensing
 
-DataArc.EntityFrameworkCore is commercially licensed software.
+DataArc 2.0 separates free EF Core execution capabilities from commercial SQL Server-specific capabilities.
 
-For current pricing, licensing terms, purchases, and activation support, visit the [DataArc portal](https://www.dataarc.dev).
+For current pricing, commercial terms, purchases, and activation support, use the [DataArc website](https://www.dataarc.dev).
 
-A valid trial or paid product license is required to activate the product. Activation is handled through the DataArc licensing API.
+The applicable license agreement and current official terms remain authoritative.
 
-This page describes the activation behavior implemented by the current licensing service. The applicable license agreement and current commercial terms published by Solid Arc Software remain authoritative.
+## Free package
 
-## Trial period
+`DataArc.EntityFrameworkCore` can be used without a DataArc runtime license.
 
-The current DataArc trial period is **14 days**.
-
-The trial is intended to let a developer or organisation evaluate DataArc against a real application workload before purchasing a paid license.
-
-Typical evaluation areas include:
-
-- execution-context registration;
-- query and command pipelines;
-- bulk operations;
-- parallel execution;
-- structured execution results;
-- database and script generation;
-- compatibility with the target EF Core provider and application architecture.
-
-```text
-Install DataArc
-    -> request trial activation
-    -> receive a signed activation result
-    -> evaluate for 14 days
-    -> purchase a paid license for continued use
+```xml
+<PackageReference Include="DataArc.EntityFrameworkCore" Version="2.0.0" />
 ```
 
-The trial is for evaluation and is not a permanent free production license.
+Register the free path with:
 
-## How activation works
+```csharp
+services.AddDataArcCore();
+```
 
-The runtime submits an activation request to the DataArc licensing API. This information is transmitted to and processed by the DataArc licensing API for license administration and activation management.
+Free capabilities documented in this guide include:
 
-## Important notice: machine data collection
+- direct bulk insertion;
+- caller-owned transactional bulk execution;
+- `AsParallel()`;
+- fluent `Add`, `AddRange`, `Update`, `Remove`, and `AddBulk`;
+- `SaveChangesParallelAsync()`.
 
-DataArc collects machine information when a trial or paid license is activated.
+## Commercial SQL Server package
 
-The activation request may include:
+`DataArc.EntityFrameworkCore.SqlServer` contains SQL Server-specific commercial capabilities.
 
-- machine identifiers, including available network-adapter identifiers;
-- machine name;
-- operating-system user name;
-- domain name;
-- product and license information required to process the activation.
+```xml
+<PackageReference Include="DataArc.EntityFrameworkCore.SqlServer" Version="2.0.0" />
+```
 
-This information is used to:
+Examples include:
 
-- associate the activation with the applicable machine;
-- identify an existing activation for that machine;
-- enforce purchased activation quantities;
-- prevent unauthorised or duplicate activation;
-- administer the trial or paid product license.
+- DataArc-owned SQL transaction execution;
+- `AsParallelTransaction()`;
+- `CommitTransactionParallelAsync()`;
+- multi-context database coordination;
+- relational database-definition tooling;
+- the multi-context DDL Builder.
 
-## Paid activation
+## License configuration
 
-A paid activation uses the license key issued through the DataArc purchase and licensing process.
-The package available on NuGet and the commercial entitlement are separate concerns:
+A commercial application can configure an explicit key:
+
+```csharp
+services
+    .AddDataArcCore(options =>
+        options.UseKey(licenseKey))
+    .ConfigureDataArc();
+```
+
+Where the deployment uses the server-key path:
+
+```csharp
+services
+    .AddDataArcCore(options =>
+        options.UseServerKey())
+    .ConfigureDataArc();
+```
+
+A common test/bootstrap shape is:
+
+```csharp
+services
+    .AddDataArcCore(options =>
+    {
+        if (string.IsNullOrWhiteSpace(licenseKey))
+            options.UseServerKey();
+        else
+            options.UseKey(licenseKey);
+    })
+    .ConfigureDataArc();
+```
+
+Keep license values outside source control.
+
+Use normal secret-management mechanisms such as environment variables, .NET user secrets, or the deployment platform's secret store.
+
+## NuGet availability and entitlement
+
+Package availability and commercial entitlement are separate concerns.
 
 ```text
-NuGet package availability
+NuGet package available
     !=
-commercial product entitlement
+commercial entitlement granted
 ```
-Installing a package does not by itself grant a paid license.
 
-## Containers and CI/CD
+Installing `DataArc.EntityFrameworkCore.SqlServer` does not remove the requirement to satisfy the applicable commercial license terms.
 
-Trial licenses are not supported for container or CI/CD activation paths.
+## Trial and evaluation
 
-The licensing service returns an error when a trial activation is attempted in a container or CI/CD scenario that requires a paid activation.
+Where a trial or evaluation path is offered, use the current DataArc portal and product terms for the applicable duration, activation rules, and deployment restrictions.
+
+Trial terms can change independently of a documentation release, so this guide does not hard-code a trial duration.
+
+## Containers, CI/CD, and deployment
+
+Use the current product terms for supported container, CI/CD, and server deployment scenarios.
+
+Do not commit:
+
+- private license keys;
+- activation material;
+- server credentials;
+- portal credentials;
+- machine-specific secrets.
+
+## Package boundaries
+
+The free and commercial package split is intentional:
 
 ```text
-Container or CI/CD activation
-    + trial license
-        -> activation rejected
-        -> paid license required
+DataArc.EntityFrameworkCore
+    -> free general EF Core execution
+
+DataArc.EntityFrameworkCore.SqlServer
+    -> commercial SQL Server-specific execution and DDL tooling
 ```
 
-A paid license key is required for supported container or CI/CD activation scenarios.
+The SQL Server package depends on the free package.
 
-## Public source and commercial licensing
+## Support
 
-The public DataArc repositories and demonstration code make the product easier to inspect and evaluate.
+For current product and licensing information:
 
-Public visibility does not automatically make the commercial packages permissively licensed.
+https://www.dataarc.dev
 
-```text
-Public repository
-    !=
-MIT license
-    !=
-unrestricted redistribution
-```
-Read the applicable repository license and commercial agreement before:
+For support:
 
-- redistributing DataArc packages;
-- sharing license keys or activation responses;
-- republishing package binaries;
-- modifying or reselling licensed components;
-- embedding licensed components in another distributable product.
-
-## Current terms and support
-
-Use the official DataArc resources for current information about:
-
-- product pricing;
-- package entitlements;
-- license duration;
-- purchase terms;
-- supported deployment scenarios;
-- activation support.
-
-When this documentation conflicts with the signed commercial agreement or current official terms, the agreement and official terms take precedence.
-
-## Summary
-
-The current licensing flow is:
-
-```text
-Trial
-    -> activation request
-    -> 14-day product activation
-    -> signed activation result
-
-Paid license
-    -> license key resolved by licensing service
-    -> product and package entitlements loaded
-    -> machine identifiers matched or recorded
-    -> signed activation result
-
-Container or CI/CD
-    -> trial activation not supported
-    -> paid license required
-```
+support@dataarc.dev

@@ -1,35 +1,33 @@
-﻿using DataArc.Core;
-using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Dtos;
+﻿using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Dtos;
 using DataArc.EntityFrameworkCore.Demo.Contracts.Application.Modules.Google.Repository;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
+using Microsoft.EntityFrameworkCore;
 
-namespace DataArc.EntityFrameworkCore.Demo.Application.Modules.Google.Repository
+internal class GoogleRepository : IGoogleRepository
 {
-    internal class GoogleRepository : IGoogleRepository
+    private readonly IDbContextFactory<GoogleDbContext> _dbContextFactory;
+
+    public GoogleRepository(
+        IDbContextFactory<GoogleDbContext> dbContextFactory)
     {
-        private readonly IQueryFactory _queryFactory;
-        public GoogleRepository(IQueryFactory queryFactory)
-        {
-            _queryFactory = queryFactory;
-        }
+        _dbContextFactory = dbContextFactory;
+    }
 
-        public async Task<List<EmployeeDto>> GetTopRatedEmployeesAsync(double rating)
-        {
-            var topRatedEmployeesQuery = await _queryFactory.CreateQueryAsync();
+    public async Task<List<EmployeeDto>> GetTopRatedEmployeesAsync(
+        double rating)
+    {
+        await using var dbContext =
+            await _dbContextFactory.CreateDbContextAsync();
 
-            var topRatedEmployees = await topRatedEmployeesQuery
-                .UseDbExecutionContext<IGoogleDbContext>()
-                .ReadWhereAsync<Employee>(e => e.Rating > rating);
-
-            return topRatedEmployees
-                .Select(emp => new EmployeeDto()
-                {
-                    Id = emp.Id,
-                    Name = emp.Name,
-                    Surname = emp.Surname,
-                    Salary = emp.Salary,
-                }).ToList();
-        }
+        return await dbContext!.Employee!
+            .Where(employee => employee.Rating > rating)
+            .Select(employee => new EmployeeDto
+            {
+                Id = employee.Id,
+                Name = employee.Name,
+                Surname = employee.Surname,
+                Salary = employee.Salary
+            })
+            .ToListAsync();
     }
 }

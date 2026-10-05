@@ -1,86 +1,60 @@
-﻿using DataArc.Core;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
+﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Utils;
+
+using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeders
 {
     public interface ISolidArcDbSeeder : IDatabaseSeeder
     {
-
     }
 
     internal class SolidArcDbSeeder : ISolidArcDbSeeder
     {
-        private readonly ICommandFactory _commandFactory;
+        private const int SeedRecordCount = 100_000;
 
-        public SolidArcDbSeeder(ICommandFactory commandFactory)
+        private readonly IDbContextFactory<SolidArcDbContext> _dbContextFactory;
+
+        public SolidArcDbSeeder(
+            IDbContextFactory<SolidArcDbContext> dbContextFactory)
         {
-            _commandFactory = commandFactory;
+            _dbContextFactory = dbContextFactory;
         }
 
         public bool SeedDatabase()
         {
-            try
-            {
-                var seedingCommand = _commandFactory.CreateCommand();
+            using var dbContext =
+                _dbContextFactory.CreateDbContext();
 
-                var commandResult = seedingCommand
-                    .UseDbExecutionContext<SolidArcDbContext>()
-                    .Add(new Employer()
-                    {
-                        Name = "OpenAI",
-                        Description = "OpenAI Company"
-                    }).Execute();
+            var seedData =
+                SeedDataGenerator.GenerateHrSeedData(SeedRecordCount);
 
+            dbContext.Employer!.AddRange(seedData.Employers);
+            dbContext.SaveChanges();
 
-                if (!commandResult.Success)
-                    throw new Exception($"Exception occured in {nameof(SolidArcDbSeeder)}, {commandResult.Message}");
+            dbContext.Employee!.AddRange(seedData.Employees);
+            dbContext.SaveChanges();
 
-                return true;
-            }
-            catch
-            {
-                throw;
-            }
+            return true;
         }
 
         public async Task<bool> SeedDatabaseAsync()
         {
-            try
-            {
-                var seedingCommand = await _commandFactory.CreateCommandAsync();
+            await using var dbContext =
+                await _dbContextFactory.CreateDbContextAsync();
 
-                var employer = new Employer()
-                {
-                    Name = "OpenAI",
-                    Description = "OpenAI Company"
-                };
+            var seedData =
+                SeedDataGenerator.GenerateHrSeedData(SeedRecordCount);
 
-                var commandResult = await seedingCommand
-                    .UseDbExecutionContext<SolidArcDbContext>()
-                    .Add(employer)
-                    .ExecuteAsync();
+            await dbContext.AddBulkAsync(
+                seedData.Employers,
+                SeedRecordCount);
 
-                if (!commandResult.Success)
-                    throw new Exception($"Exception occured in {nameof(SolidArcDbSeeder)}, {commandResult.Message}");
+            await dbContext.AddBulkAsync(
+                seedData.Employees,
+                SeedRecordCount);
 
-                var bulkSeedCommand = await _commandFactory.CreateCommandAsync();
-
-                var bulkSeedCommandResult = await seedingCommand
-                   .UseDbExecutionContext<SolidArcDbContext>()
-                   .AddBulk(SeedDataGenerator.GenerateHrSeedData(100_000), 100_000)
-                   .ExecuteAsync();
-
-                if(!bulkSeedCommandResult.Success)
-                    throw new Exception($"Exception occured in {nameof(SolidArcDbSeeder)}, {bulkSeedCommandResult.Message}");
-
-                return true;
-            }
-            catch
-            {
-                throw;
-            }
+            return true;
         }
     }
 }

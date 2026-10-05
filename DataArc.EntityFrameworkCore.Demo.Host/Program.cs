@@ -7,6 +7,8 @@ using DataArc.EntityFrameworkCore.Demo.Host.Workers;
 using DataArc.EntityFrameworkCore.Demo.Host;
 using DataArc.EntityFrameworkCore.Demo;
 
+using DataArc.EntityFrameworkCore;
+
 var host = Host
     .CreateDefaultBuilder(args)
     .ConfigureServices(services =>
@@ -18,6 +20,7 @@ var host = Host
             .Build();
 
         services
+            .AddDataArcCore()
             .AddRepositories(configurationManager)
             .AddBackgroundServices(configurationManager)
             .AddHostedService<DemoWorkflowWorker>();

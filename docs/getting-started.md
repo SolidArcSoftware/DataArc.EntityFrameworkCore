@@ -1,333 +1,158 @@
 # Getting Started
 
-This guide introduces the basic DataArc.EntityFrameworkCore execution model.
-
-The setup is:
-
-```text
-Install DataArc.EntityFrameworkCore
-    ↓
-Create or expose an EF Core execution context
-    ↓
-Register the execution context
-    ↓
-Inject a command or query factory
-    ↓
-Select the execution context
-    ↓
-Execute the operation
-```
-
 ## Prerequisites
 
 You need:
 
-- a supported .NET SDK
-- a supported Entity Framework Core version
-- an EF Core database provider
-- a database connection string
-- the DataArc.EntityFrameworkCore NuGet package
+- a supported .NET SDK;
+- the matching Entity Framework Core major version;
+- an EF Core database provider;
+- `DataArc.EntityFrameworkCore` 2.0.0.
 
-The public demo uses SQL Server.
+The public demo targets .NET 10 and SQL Server.
 
-See [Compatibility](compatibility.md) for supported versions.
+See [Compatibility](compatibility.md) for the supported framework matrix.
 
-## Install the package
-
-Install DataArc.EntityFrameworkCore in the project that configures persistence:
+## Install the free package
 
 ```bash
-dotnet add package DataArc.EntityFrameworkCore
+dotnet add package DataArc.EntityFrameworkCore --version 2.0.0
 ```
 
-Install the EF Core provider required by the application.
-
-For SQL Server:
+For SQL Server applications, install the matching EF Core provider:
 
 ```bash
 dotnet add package Microsoft.EntityFrameworkCore.SqlServer
 ```
 
-## Choose an execution-context style
+## Register DataArc once
 
-DataArc supports two valid styles:
-
-1. a public execution-context contract implemented by an internal concrete `DbContext`
-2. a concrete `DbContext` that implements `IExecutionContext` directly
-
-Use a contract when application code should not depend on the concrete persistence implementation.
-
-Use the concrete context directly when hiding it adds no value.
-
-## Option 1: Execution-context contract
-
-Create a public contract that extends `IExecutionContext`:
-
-```csharp
-using DataArc.Core;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
-
-using Microsoft.EntityFrameworkCore;
-
-namespace DataArc.EntityFrameworkCore.Demo.Persistence.Contracts
-{
-    public interface IGoogleDbContext : IExecutionContext
-    {
-        DbSet<Employer>? Employer { get; set; }
-
-        DbSet<Employee>? Employee { get; set; }
-    }
-}
-```
-
-Implement the contract with the concrete EF Core `DbContext`:
-
-```csharp
-using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
-
-using Microsoft.EntityFrameworkCore;
-
-namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts
-{
-    internal class GoogleDbContext
-        : DbContext,
-          IGoogleDbContext
-    {
-        public GoogleDbContext(
-            DbContextOptions<GoogleDbContext> dbContextOptions)
-            : base(dbContextOptions)
-        {
-        }
-
-        public DbSet<Employer>? Employer { get; set; }
-
-        public DbSet<Employee>? Employee { get; set; }
-
-        protected override void OnModelCreating(
-            ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder
-                .Entity<Employer>()
-                .Property(employer => employer.Description)
-                .HasColumnType("text");
-        }
-    }
-}
-```
-
-Application workflows target the contract:
-
-```csharp
-.UseDbExecutionContext<IGoogleDbContext>()
-```
-
-## Option 2: Direct concrete DbContext
-
-A concrete context can implement `IExecutionContext` directly:
-
-```csharp
-using DataArc.Core;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
-
-using Microsoft.EntityFrameworkCore;
-
-namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts
-{
-    public class GoogleDbContext
-        : DbContext,
-          IExecutionContext
-    {
-        public GoogleDbContext(
-            DbContextOptions<GoogleDbContext> dbContextOptions)
-            : base(dbContextOptions)
-        {
-        }
-
-        public DbSet<Employer>? Employer { get; set; }
-
-        public DbSet<Employee>? Employee { get; set; }
-
-        protected override void OnModelCreating(
-            ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
-
-            modelBuilder
-                .Entity<Employer>()
-                .Property(employer => employer.Description)
-                .HasColumnType("text");
-        }
-    }
-}
-```
-
-Application workflows target the concrete context:
-
-```csharp
-.UseDbExecutionContext<GoogleDbContext>()
-```
-
-## Register DataArc
-
-Call `AddDataArcCore` once at the application root.
-
-Register EF Core execution contexts through `ConfigureDataArc`.
-
-### Contract-based registration
+Register DataArc at the application composition root:
 
 ```csharp
 services.AddDataArcCore();
+```
 
-services.ConfigureDataArc(dataArc =>
-{
-    dataArc.UseEntityFrameworkCore(ef =>
+Do not repeat the application-level DataArc bootstrap inside feature or module registration methods.
+
+## Register DbContext factories normally
+
+DataArc uses normal EF Core contexts.
+
+For a console or worker application:
+
+```csharp
+services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseSqlServer(
+        configuration.GetConnectionString("ApplicationDb")));
+```
+
+For an ASP.NET Core application where factory-created contexts participate in DataArc execution that resolves scoped infrastructure, register the factory as scoped:
+
+```csharp
+services.AddDbContextFactory<ApplicationDbContext>(
+    options =>
+        options.UseSqlServer(
+            configuration.GetConnectionString("ApplicationDb")),
+    ServiceLifetime.Scoped);
+```
+
+`AddDbContextFactory<TContext>()` registers the factory as a singleton by default. A factory-created `DbContext` is caller-owned and is not the same thing as a request-scoped `DbContext` resolved directly from DI.
+
+## Query with ordinary EF Core
+
+```csharp
+await using var dbContext =
+    await dbContextFactory.CreateDbContextAsync();
+
+var employees = await dbContext.Employee!
+    .AsNoTracking()
+    .Where(employee => employee.Salary > salaryThreshold)
+    .ToListAsync();
+```
+
+No DataArc query abstraction is required.
+
+## Execute a direct bulk operation
+
+```csharp
+await dbContext.AddBulkAsync(
+    employees,
+    batchSize);
+```
+
+## Execute a parallel persistence plan
+
+```csharp
+await dbContext
+    .AsParallel()
+    .AddBulk(employers, batchSize)
+    .AddBulk(employees, batchSize)
+    .SaveChangesParallelAsync();
+```
+
+The terminal operation returns the affected-row count:
+
+```csharp
+var affected = await dbContext
+    .AsParallel()
+    .AddBulk(employees, batchSize)
+    .SaveChangesParallelAsync();
+```
+
+## Coordinate several DbContexts
+
+Independent contexts can be coordinated with normal .NET concurrency:
+
+```csharp
+var results = await Task.WhenAll(
+    googleDbContext
+        .AsParallel()
+        .AddBulk(employers, batchSize)
+        .AddBulk(employees, batchSize)
+        .SaveChangesParallelAsync(),
+
+    microsoftDbContext
+        .AsParallel()
+        .AddBulk(employers, batchSize)
+        .AddBulk(employees, batchSize)
+        .SaveChangesParallelAsync(),
+
+    openAiDbContext
+        .AsParallel()
+        .AddBulk(employers, batchSize)
+        .AddBulk(employees, batchSize)
+        .SaveChangesParallelAsync());
+
+var totalAffected = results.Sum();
+```
+
+Each `DbContext` remains an independent EF Core boundary.
+
+## Commercial SQL Server capabilities
+
+Install the SQL Server package when the application needs DataArc-owned SQL transactions or database-definition tooling:
+
+```bash
+dotnet add package DataArc.EntityFrameworkCore.SqlServer --version 2.0.0
+```
+
+Then configure the commercial DataArc path according to the installed license:
+
+```csharp
+services
+    .AddDataArcCore(options =>
     {
-        ef.AddDbExecutionContext<
-            IGoogleDbContext,
-            GoogleDbContext>(options =>
-        {
-            options.UseSqlServer(
-                configuration.GetConnectionString(
-                    "GoogleDb"));
-        });
-    });
-});
+        if (string.IsNullOrWhiteSpace(licenseKey))
+            options.UseServerKey();
+        else
+            options.UseKey(licenseKey);
+    })
+    .ConfigureDataArc();
 ```
 
-### Direct DbContext registration
+See:
 
-```csharp
-services.AddDataArcCore();
-
-services.ConfigureDataArc(dataArc =>
-{
-    dataArc.UseEntityFrameworkCore(ef =>
-    {
-        ef.AddDbExecutionContext<GoogleDbContext>(options =>
-        {
-            options.UseSqlServer(
-                configuration.GetConnectionString(
-                    "GoogleDb"));
-        });
-    });
-});
-```
-
-## Execute a query
-
-Inject `IQueryFactory` into an application service or repository:
-
-```csharp
-private readonly IQueryFactory _queryFactory;
-
-public SalaryAdjustmentService(
-    IQueryFactory queryFactory)
-{
-    _queryFactory = queryFactory;
-}
-```
-
-Create a query and select the execution boundary explicitly:
-
-```csharp
-var employeesQuery = await _queryFactory.CreateQueryAsync();
-
-var employees = await employeesQuery
-    .UseDbExecutionContext<SolidArcDbContext>()
-    .ReadWhereAsync<Employee>(
-        employee => employee.Salary > salaryThreshold);
-```
-
-A contract-based context can be selected in the same way:
-
-```csharp
-var employees = await employeesQuery
-    .UseDbExecutionContext<IGoogleDbContext>()
-    .ReadWhereAsync<Employee>(
-        employee => employee.Rating > 4.5);
-```
-
-## Execute a command
-
-Inject `ICommandFactory` into the application workflow:
-
-```csharp
-private readonly ICommandFactory _commandFactory;
-
-public SalaryAdjustmentService(
-    ICommandFactory commandFactory)
-{
-    _commandFactory = commandFactory;
-}
-```
-
-Create a command builder and add work to an execution context:
-
-```csharp
-var commandBuilder = await _commandFactory
-    .CreateCommandBuilderAsync();
-
-commandBuilder
-    .UseDbExecutionContext<GoogleDbContext>()
-    .AddBulk(employees, batchSize);
-```
-
-Build and execute the command:
-
-```csharp
-var command = await commandBuilder.BuildAsync();
-
-var commandResult = await command.ExecuteAsync();
-```
-
-## Execute work across several contexts
-
-A single command pipeline can target several registered execution contexts:
-
-```csharp
-var commandBuilder = await _commandFactory
-    .CreateCommandBuilderAsync();
-
-commandBuilder
-    .UseDbExecutionContext<GoogleDbContext>()
-    .AddBulk(employees, batchSize);
-
-commandBuilder
-    .UseDbExecutionContext<MicrosoftDbContext>()
-    .AddBulk(employees, batchSize);
-
-commandBuilder
-    .UseDbExecutionContext<OpenAIDbContext>()
-    .AddBulk(employees, batchSize);
-
-var command = await commandBuilder.BuildAsync();
-
-var commandResult = await command.ExecuteAsync();
-```
-
-Each target remains explicit and independently routed.
-
-## Check the result
-
-```csharp
-if (!commandResult.Success)
-{
-    throw new InvalidOperationException(
-        $"Execution failed. {commandResult.Exception?.Message}");
-}
-
-return commandResult.TotalAffected;
-```
-
-## Next steps
-
-Continue with:
-
-- [Execution Contexts](execution-contexts.md)
-- [Query Pipelines](query-pipelines.md)
-- [Command Pipelines](command-pipelines.md)
-- [Bulk and Parallel Operations](bulk-and-parallel-operations.md)
-- [Structured Execution Results](structured-results.md)
+- [Transactions](transactions.md)
+- [Multi-Context DDL Builder](database-generation.md)
+- [Licensing](licensing-and-trial.md)

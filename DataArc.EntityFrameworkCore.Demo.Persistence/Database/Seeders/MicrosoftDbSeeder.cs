@@ -1,73 +1,55 @@
-﻿using DataArc.Core;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
+﻿using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
+
+using Microsoft.EntityFrameworkCore;
 
 namespace DataArc.EntityFrameworkCore.Demo.Persistence.Database.Seeders
 {
     public interface IMicrosoftDbSeeder : IDatabaseSeeder
     {
-
     }
 
     internal class MicrosoftDbSeeder : IMicrosoftDbSeeder
     {
-        private readonly ICommandFactory _commandFactory;
+        private readonly IDbContextFactory<MicrosoftDbContext> _dbContextFactory;
 
-        public MicrosoftDbSeeder(ICommandFactory commandFactory)
+        public MicrosoftDbSeeder(
+            IDbContextFactory<MicrosoftDbContext> dbContextFactory)
         {
-            _commandFactory = commandFactory;
+            _dbContextFactory = dbContextFactory;
         }
 
         public bool SeedDatabase()
         {
-            try
-            {
-                var seedingCommand = _commandFactory.CreateCommand();
+            using var dbContext = _dbContextFactory.CreateDbContext();
 
-                var commandResult = seedingCommand
-                    .UseDbExecutionContext<MicrosoftDbContext>()
-                    .Add(new Employer()
-                    {
-                        Name = "Google",
-                        Description = "Google Company"
-                    }).Execute();
+            dbContext.Employer!.Add(
+                new Employer
+                {
+                    Name = "Google",
+                    Description = "Google Company"
+                });
 
+            dbContext.SaveChanges();
 
-                if (!commandResult.Success)
-                    throw new Exception($"Exception occured in {nameof(MicrosoftDbSeeder)}, {commandResult.Message}");
-
-                return true;
-            }
-            catch
-            {
-                throw;
-            }
+            return true;
         }
 
         public async Task<bool> SeedDatabaseAsync()
         {
-            try
-            {
-                var seedingCommand = await _commandFactory.CreateCommandAsync();
+            await using var dbContext =
+                await _dbContextFactory.CreateDbContextAsync();
 
-                var commandResult = await seedingCommand
-                    .UseDbExecutionContext<MicrosoftDbContext>()
-                    .Add(new Employer() 
-                    { 
-                        Name = "Google",
-                        Description = "Google Company"
-                    })
-                    .ExecuteAsync();
+            await dbContext.Employer!.AddAsync(
+                new Employer
+                {
+                    Name = "Google",
+                    Description = "Google Company"
+                });
 
-                if (!commandResult.Success)
-                    throw new Exception($"Exception occured in {nameof(MicrosoftDbSeeder)}, {commandResult.Message}");
+            await dbContext.SaveChangesAsync();
 
-                return true;
-            }
-            catch
-            {
-                throw;
-            }
+            return true;
         }
     }
 }

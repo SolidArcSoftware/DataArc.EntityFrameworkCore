@@ -1,20 +1,19 @@
-﻿using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.Extensions.DependencyInjection;
-
-using BenchmarkDotNet.Attributes;
+﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
-using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
 
-using DataArc.Core;
 using DataArc.EntityFrameworkCore.Demo.Persistence;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.Creator;
+using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBContexts;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Database.DBModels;
 using DataArc.EntityFrameworkCore.Demo.Persistence.Utils;
-using DataArc.EntityFrameworkCore.Demo.Persistence.Contracts;
+
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DataArc.EntityFrameworkCore.Demo.Benchmark
 {
@@ -30,11 +29,20 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         private const int MaxRecordCount = 1_000_000;
 
         private IServiceProvider? _serviceProvider;
-        private IReadOnlyCollection<IDatabaseCreator> _databaseCreators = new List<IDatabaseCreator>();
-        private ICommandFactory? _commandFactory;
 
-        private List<Employee> _allEmployees = new List<Employee>();
-        private List<Employee> _benchmarkEmployees = new List<Employee>();
+        private IReadOnlyCollection<IDatabaseCreator> _databaseCreators =
+            new List<IDatabaseCreator>();
+
+        private IDbContextFactory<GoogleDbContext>? _googleDbContextFactory;
+        private IDbContextFactory<MicrosoftDbContext>? _microsoftDbContextFactory;
+        private IDbContextFactory<OpenAIDbContext>? _openAiDbContextFactory;
+        private IDbContextFactory<SolidArcDbContext>? _solidArcDbContextFactory;
+
+        private List<Employer> _allEmployers = new();
+        private List<Employee> _allEmployees = new();
+
+        private List<Employer> _benchmarkEmployers = new();
+        private List<Employee> _benchmarkEmployees = new();
 
         [Params(62_500, 125_000, 250_000)]
         public int RecordCount { get; set; }
@@ -45,11 +53,13 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         public void GlobalSetup()
         {
             var configurationManager = new ConfigurationManager();
+
             configurationManager
                 .AddJsonFile("appsettings.json", optional: false)
                 .Build();
 
             _serviceProvider = new ServiceCollection()
+                .AddDataArcCore()
                 .AddPersistence(configurationManager)
                 .BuildServiceProvider();
 
@@ -61,32 +71,49 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
                 _serviceProvider.GetRequiredService<ISASDbCreator>()
             };
 
-            _commandFactory = _serviceProvider.GetRequiredService<ICommandFactory>();
+            _googleDbContextFactory =
+                _serviceProvider.GetRequiredService<
+                    IDbContextFactory<GoogleDbContext>>();
 
-            _allEmployees = SeedDataGenerator
-                .GenerateHrSeedData(MaxRecordCount)
-                .ToList();
+            _microsoftDbContextFactory =
+                _serviceProvider.GetRequiredService<
+                    IDbContextFactory<MicrosoftDbContext>>();
+
+            _openAiDbContextFactory =
+                _serviceProvider.GetRequiredService<
+                    IDbContextFactory<OpenAIDbContext>>();
+
+            _solidArcDbContextFactory =
+                _serviceProvider.GetRequiredService<
+                    IDbContextFactory<SolidArcDbContext>>();
+
+            var seedData =
+                SeedDataGenerator.GenerateHrSeedData(MaxRecordCount);
+
+            _allEmployers = seedData.Employers;
+            _allEmployees = seedData.Employees;
         }
 
         [IterationSetup]
         public void IterationSetup()
         {
             if (_databaseCreators.Count == 0)
-                throw new InvalidOperationException("Benchmark database creators were not resolved.");
+                throw new InvalidOperationException(
+                    "Benchmark database creators were not resolved.");
 
             foreach (var databaseCreator in _databaseCreators)
             {
-                if (!databaseCreator.EnsureDeleted())
-                    throw new InvalidOperationException(
-                        $"Failed to delete benchmark database using {databaseCreator.GetType().Name}.");
+                databaseCreator.EnsureDeleted();
             }
 
             foreach (var databaseCreator in _databaseCreators)
             {
-                if (!databaseCreator.EnsureCreated())
-                    throw new InvalidOperationException(
-                        $"Failed to create benchmark database using {databaseCreator.GetType().Name}.");
+                databaseCreator.EnsureCreated();
             }
+
+            _benchmarkEmployers = _allEmployers
+                .Take(RecordCount)
+                .ToList();
 
             _benchmarkEmployees = _allEmployees
                 .Take(RecordCount)
@@ -96,43 +123,67 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         [Benchmark]
         public async Task<int> ExecuteParallelBulkInsertAsync()
         {
-            if (_commandFactory == null)
-                throw new InvalidOperationException($"{nameof(ICommandFactory)} was not resolved.");
+            if (_googleDbContextFactory == null)
+                throw new InvalidOperationException(
+                    $"{nameof(_googleDbContextFactory)} was not resolved.");
 
-            if (_benchmarkEmployees.Count == 0)
-                throw new InvalidOperationException("Benchmark employee data was not generated.");
+            if (_microsoftDbContextFactory == null)
+                throw new InvalidOperationException(
+                    $"{nameof(_microsoftDbContextFactory)} was not resolved.");
 
-            var commandBuilder = await _commandFactory.CreateCommandBuilderAsync();
+            if (_openAiDbContextFactory == null)
+                throw new InvalidOperationException(
+                    $"{nameof(_openAiDbContextFactory)} was not resolved.");
 
-            if (commandBuilder == null)
-                throw new InvalidOperationException($"{nameof(commandBuilder)} was not resolved.");
+            if (_solidArcDbContextFactory == null)
+                throw new InvalidOperationException(
+                    $"{nameof(_solidArcDbContextFactory)} was not resolved.");
 
-            commandBuilder
-                .UseDbExecutionContext<IGoogleDbContext>()
-                    .AddBulk(_benchmarkEmployees, BulkBatchSize);
-
-            commandBuilder
-                .UseDbExecutionContext<IOpenAIDbContext>()
-                    .AddBulk(_benchmarkEmployees, BulkBatchSize);
-
-            commandBuilder
-                .UseDbExecutionContext<IMicrosoftDbContext>()
-                    .AddBulk(_benchmarkEmployees, BulkBatchSize);
-
-            commandBuilder
-                .UseDbExecutionContext<ISolidArcDbContext>()
-                    .AddBulk(_benchmarkEmployees, BulkBatchSize);
-
-            var command = await commandBuilder.BuildAsync();
-            var commandResult = await command.ExecuteParallelAsync();
-
-            if (!commandResult.Success)
+            if (_benchmarkEmployers.Count == 0 ||
+                _benchmarkEmployees.Count == 0)
             {
                 throw new InvalidOperationException(
-                    $"Failed to execute raw employee bulk insert benchmark. {commandResult.Exception?.Message}");
+                    "Benchmark data was not generated.");
             }
 
-            return commandResult.TotalAffected;
+            await using var googleDbContext =
+                await _googleDbContextFactory.CreateDbContextAsync();
+
+            await using var microsoftDbContext =
+                await _microsoftDbContextFactory.CreateDbContextAsync();
+
+            await using var openAiDbContext =
+                await _openAiDbContextFactory.CreateDbContextAsync();
+
+            await using var solidArcDbContext =
+                await _solidArcDbContextFactory.CreateDbContextAsync();
+
+            var results = await Task.WhenAll(
+                googleDbContext
+                    .AsParallel()
+                    .AddBulk(_benchmarkEmployers, BulkBatchSize)
+                    .AddBulk(_benchmarkEmployees, BulkBatchSize)
+                    .SaveChangesParallelAsync(),
+
+                microsoftDbContext
+                    .AsParallel()
+                    .AddBulk(_benchmarkEmployers, BulkBatchSize)
+                    .AddBulk(_benchmarkEmployees, BulkBatchSize)
+                    .SaveChangesParallelAsync(),
+
+                openAiDbContext
+                    .AsParallel()
+                    .AddBulk(_benchmarkEmployers, BulkBatchSize)
+                    .AddBulk(_benchmarkEmployees, BulkBatchSize)
+                    .SaveChangesParallelAsync(),
+
+                solidArcDbContext
+                    .AsParallel()
+                    .AddBulk(_benchmarkEmployers, BulkBatchSize)
+                    .AddBulk(_benchmarkEmployees, BulkBatchSize)
+                    .SaveChangesParallelAsync());
+
+            return results.Sum();
         }
 
         [GlobalCleanup]
@@ -148,35 +199,61 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
     {
         public BenchmarkConfig()
         {
-            AddColumn(new TotalInsertedRecordsColumn(destinationContextCount: 4));
+            AddColumn(
+                new TotalInsertedRecordsColumn(
+                    destinationContextCount: 4,
+                    bulkOperationCountPerContext: 2));
         }
     }
 
     public sealed class TotalInsertedRecordsColumn : IColumn
     {
         private readonly int _destinationContextCount;
-        public TotalInsertedRecordsColumn(int destinationContextCount)
+        private readonly int _bulkOperationCountPerContext;
+
+        public TotalInsertedRecordsColumn(
+            int destinationContextCount,
+            int bulkOperationCountPerContext)
         {
             _destinationContextCount = destinationContextCount;
+            _bulkOperationCountPerContext = bulkOperationCountPerContext;
         }
+
         public string Id => nameof(TotalInsertedRecordsColumn);
+
         public string ColumnName => "Total Inserted Records";
+
         public bool AlwaysShow => true;
+
         public ColumnCategory Category => ColumnCategory.Params;
+
         public int PriorityInCategory => 0;
+
         public bool IsNumeric => true;
+
         public UnitType UnitType => UnitType.Dimensionless;
-        public string Legend => "Total records inserted across all participating DbContexts.";
-        public string GetValue(Summary summary, BenchmarkCase benchmarkCase)
+
+        public string Legend =>
+            "Total records inserted across all bulk operations and participating DbContexts.";
+
+        public string GetValue(
+            Summary summary,
+            BenchmarkCase benchmarkCase)
         {
             var recordCountParameter = benchmarkCase.Parameters.Items
                 .Single(parameter => parameter.Name == "RecordCount");
 
-            var recordCount = Convert.ToInt32(recordCountParameter.Value);
-            var totalInsertedRecords = recordCount * _destinationContextCount;
+            var recordCount =
+                Convert.ToInt32(recordCountParameter.Value);
+
+            var totalInsertedRecords =
+                recordCount *
+                _destinationContextCount *
+                _bulkOperationCountPerContext;
 
             return totalInsertedRecords.ToString("N0");
         }
+
         public string GetValue(
             Summary summary,
             BenchmarkCase benchmarkCase,
@@ -184,11 +261,15 @@ namespace DataArc.EntityFrameworkCore.Demo.Benchmark
         {
             return GetValue(summary, benchmarkCase);
         }
+
         public bool IsAvailable(Summary summary)
         {
             return true;
         }
-        public bool IsDefault(Summary summary, BenchmarkCase benchmarkCase)
+
+        public bool IsDefault(
+            Summary summary,
+            BenchmarkCase benchmarkCase)
         {
             return false;
         }
